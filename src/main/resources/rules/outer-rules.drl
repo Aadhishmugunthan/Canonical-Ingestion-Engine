@@ -1,0 +1,10 @@
+package rules
+
+import com.poc.CanonicalIngestionEngine.model.EventEnvelope
+
+rule "Ignore Update"
+when
+ $e : EventEnvelope( eventMetadata contains "\"operation\":\"U\"" )
+then
+ $e.setIgnore(true);
+end

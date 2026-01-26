@@ -1,0 +1,17 @@
+txnType: AIS_DTL
+mandatory:
+  - TRAN_ID
+mapping:
+  TRAN_ID: $.accountInformationId
+  PAYMT_REF: $.referenceId
+  UNQ_TRAN_REF: $.correlationId
+  FUND_SRC: $.partnerName
+  TRAN_PRPS: $.paymentType
+  ORIG_RQST_PYLD: $.originalRequestPayload
+  ORIG_RESP_PYLD: $.originalResponsePayload
+  PROC_ID: $.partnerId
+  ACQ_ICA: $.brand
+  ACQ_IDEN_CD: $.acceptanceBrand
+  EVENT_ID: $.correlationId
+  EVENT_TS: $.transactionLocalDateTime
+  EVENT_CORLTN_ID: $.correlationId

@@ -1,0 +1,24 @@
+txnType: AVS_DTL
+
+mandatory:
+  - TRAN_ID
+
+mapping:
+  TRAN_ID: $.avsTranId
+
+  PAYMT_REF: $.avsExtRefId
+  UNQ_TRAN_REF: $.requestId
+
+  FUND_SRC: $.partnerName
+  TRAN_PRPS: $.busnPrtnrRefId
+
+  ORIG_RQST_PYLD: $.originalRequestPayload
+  ORIG_RESP_PYLD: $.originalResponsePayload
+
+  PROC_ID: $.processorId
+  ACQ_ICA: $.acquiringICA
+  ACQ_IDEN_CD: $.acquiringIdentificationCode
+
+  EVENT_ID: $.avsExtRefId
+  EVENT_TS: $.createDate
+  EVENT_CORLTN_ID: $.correlationId

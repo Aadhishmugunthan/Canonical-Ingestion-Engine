@@ -1,0 +1,21 @@
+[
+  {
+    "table": "TRANSACTIONS",
+    "fields": {
+      "TRANSACTION_TYPE": "$.transactionType",
+      "PARTNER_NAME": "$.partnerName",
+      "AVS_ID": "$.avsTranId"
+    }
+  },
+  {
+    "table": "SEND_TRAN_DTL",
+    "parentKey": "AVS_ID",
+    "fields": {
+      "ADDR_LINE1": "$.transferAccptAddrLn1",
+      "CITY": "$.transferAccptAddrCity",
+      "STATE": "$.transferAccptAddrState",
+      "COUNTRY": "$.transferAccptAddrCntry",
+      "POSTAL_CODE": "$.transferAccptAddrPostalCd"
+    }
+  }
+]

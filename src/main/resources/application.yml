@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    username: system
+    password: SYSTEM
+    driver-class-name: oracle.jdbc.OracleDriver
+
+  jdbc:
+    template:
+      fetch-size: 100
+
+ingestion:
+  mapping-path: classpath:/mapping
+  sql-path: classpath:/sql
+  rules-path: classpath:/rules
+
+
+logging:
+  level:
+    org.springframework.jdbc.core: DEBUG

@@ -1,0 +1,21 @@
+
+eventName: AIS
+description: Account Information Service transactions
+tables:
+  - mappingKey: AIS
+    sqlKey: AVS
+    order: 1
+    type: main
+  - mappingKey: AIS_DTL
+    sqlKey: AVS_DTL
+    order: 2
+    type: detail
+  - mappingKey: AIS_RECIP
+    sqlKey: AVS_RECIP
+    order: 3
+    type: detail
+  - mappingKey: AIS_ADDR
+    sqlKey: AVS_ADDR
+    order: 4
+    type: address
+    parentIdField: TRAN_ID

@@ -1,0 +1,20 @@
+eventName: AVS
+description: Address Verification Service transactions
+tables:
+  - mappingKey: AVS
+    sqlKey: AVS
+    order: 1
+    type: main
+  - mappingKey: AVS_DTL
+    sqlKey: AVS_DTL
+    order: 2
+    type: detail
+  - mappingKey: AVS_RECIP
+    sqlKey: AVS_RECIP
+    order: 3
+    type: detail
+  - mappingKey: AVS_ADDR
+    sqlKey: AVS_ADDR
+    order: 4
+    type: address
+    parentIdField: TRAN_ID

@@ -1,0 +1,62 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '4.0.1'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.poc'
+version = '0.0.1-SNAPSHOT'
+description = 'Demo project for Spring Boot & Canonical Ingestion Engine'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jdbc'
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	compileOnly 'org.projectlombok:lombok'
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	runtimeOnly 'com.oracle.database.jdbc:ojdbc11'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jdbc-test'
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // 🔥 DROOLS (THIS FIXES YOUR ERRORS)
+    implementation 'org.kie:kie-api:8.44.0.Final'
+    implementation 'org.drools:drools-core:8.44.0.Final'
+    implementation 'org.drools:drools-engine:8.44.0.Final'
+    implementation 'org.drools:drools-compiler:8.44.0.Final'
+
+
+    // Jackson core
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+
+    // 🔥 REQUIRED for YAML mappings
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
+
+    implementation 'com.jayway.jsonpath:json-path:2.9.0'
+
+    implementation 'org.drools:drools-mvel:8.44.0.Final'
+
+
+    implementation "org.drools:drools-xml-support:8.44.0.Final"
+
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

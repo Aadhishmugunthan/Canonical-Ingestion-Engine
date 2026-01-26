@@ -1,0 +1,25 @@
+txnType: AIS
+pkRule: TRAN_ID + "_" + ADDR_TYPE
+addresses:
+  - type: INSTITUTION
+    rootPath: $
+    fields:
+      ST_LINE1: $.institution
+      ST_LINE2: $.institution
+      CITY: $.country
+      ST: $.country
+      CNTRY_NAM: $.country
+      POST_CD: $.accountStatementCurrency
+      ADDR_STAT: $.accountType
+      POST_CD_STAT: $.fundsAvailability
+  - type: ACCOUNT
+    rootPath: $
+    fields:
+      ST_LINE1: $.accountUri
+      ST_LINE2: $.accountType
+      CITY: $.network
+      ST: $.brand
+      CNTRY_NAM: $.country
+      POST_CD: $.accountStatementCurrency
+      ADDR_STAT: $.sendingAccountEligible.eligible
+      POST_CD_STAT: $.receivingAccountEligible.eligible

@@ -1,0 +1,8 @@
+{
+  "eventName": "AVS",
+  "eventId": "evt-1001",
+  "correlationId": "corr-1001",
+  "eventTimestamp": 1705750000000,
+  "eventMetadata": "{\"version\":\"v1\"}",
+  "eventPayload": "{\"transactionType\":\"AVS\",\"partnerName\":\"PPD_AvsFundingPayment\",\"avsTranId\":\"12345\",\"transferAccptAddrLn1\":\"2200 Mastercard Blvd\",\"transferAccptAddrCity\":\"Ofallon\",\"transferAccptAddrState\":\"MO\",\"transferAccptAddrCntry\":\"USA\",\"transferAccptAddrPostalCd\":\"63368\"}"
+}
