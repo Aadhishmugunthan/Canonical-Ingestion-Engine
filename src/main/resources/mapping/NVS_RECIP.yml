@@ -3,6 +3,7 @@ mandatory:
   - TRAN_ID
 mapping:
   TRAN_ID: $.nvsTranId
+  TRAN_CRTE_DT: $.createDate
   SEND_FIRST_NAM: $.frstNam
   SEND_LST_NAM: $.lstNam
   SEND_ACCT_NUM: $.acctNum

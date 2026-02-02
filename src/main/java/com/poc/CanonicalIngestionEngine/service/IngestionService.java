@@ -13,14 +13,14 @@ import com.poc.CanonicalIngestionEngine.sql.SqlCache;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class IngestionService {
+
     @Autowired ObjectMapper mapper;
     @Autowired RuleEngine rules;
     @Autowired MappingLoader mappingLoader;
@@ -33,15 +33,16 @@ public class IngestionService {
 
     @Transactional
     public void ingest(String json) throws Exception {
+
         System.out.println("\n========== INGESTION START ==========");
 
         EventEnvelope env = mapper.readValue(json, EventEnvelope.class);
+
         System.out.println("Event: " + env.getEventName() + " (ID: " + env.getEventId() + ")");
 
         rules.apply(env);
-        if(env.isIgnore()) {
+        if (env.isIgnore()) {
             System.out.println("IGNORED by rules");
-            System.out.println("========== INGESTION END ==========\n");
             return;
         }
 
@@ -50,17 +51,17 @@ public class IngestionService {
             throw new RuntimeException("No config for: " + env.getEventName());
         }
 
-        System.out.println("Config: " + eventConfig.getTables().size() + " tables");
-
         JsonNode payload = mapper.readTree(env.getEventPayload());
 
         String parentId = null;
         int count = 0;
 
         for (TableConfig table : eventConfig.getTables()) {
+
             count++;
-            System.out.println("\n[" + count + "/" + eventConfig.getTables().size() + "] " +
-                    table.getMappingKey() + " (" + table.getType() + ")");
+
+            System.out.println("\n[" + count + "/" + eventConfig.getTables().size() + "] "
+                    + table.getMappingKey() + " (" + table.getType() + ")");
 
             if ("address".equals(table.getType())) {
                 processAddressTable(payload, table, parentId);
@@ -69,109 +70,90 @@ public class IngestionService {
             }
         }
 
-        System.out.println("\n✓ SUCCESS");
+        System.out.println("\n✅ SUCCESS");
         System.out.println("========== INGESTION END ==========\n");
     }
 
-    private String processRegularTable(JsonNode payload, TableConfig table, String currentParentId) {
+    private String processRegularTable(JsonNode payload,
+                                       TableConfig table,
+                                       String currentParentId) {
+
         CompiledMapping mapping = mappingLoader.get(table.getMappingKey());
         if (mapping == null) {
-            System.err.println("  ✗ No mapping for " + table.getMappingKey());
+            System.err.println("✗ No mapping for " + table.getMappingKey());
             return currentParentId;
         }
 
-        System.out.println("  Columns: " + mapping.getPaths().size());
-
-        Map<String,Object> data = cm.map(payload, mapping);
+        Map<String, Object> data = cm.map(payload, mapping);
         convertDatesToTimestamp(data);
+
+        // ✅ Add unique ID for recipient rows
+        if (table.getMappingKey().contains("RECIP")
+                || table.getMappingKey().contains("SENDER")
+                || table.getMappingKey().contains("RECEIVER")) {
+
+            data.put("ID", UUID.randomUUID().toString());
+            System.out.println("  Added Recipient ID: " + data.get("ID"));
+        }
 
         String sqlStatement = sql.get(table.getSqlKey());
         if (sqlStatement == null) {
-            System.err.println("  ✗ No SQL for " + table.getSqlKey());
+            System.err.println("✗ No SQL for " + table.getSqlKey());
             return currentParentId;
         }
 
         repo.insert(sqlStatement, data);
-        System.out.println("  ✓ Inserted");
+        System.out.println("✓ Inserted");
 
         if (currentParentId == null && "main".equals(table.getType())) {
             currentParentId = extractParentId(data);
-            System.out.println("  Parent ID: " + currentParentId);
+            System.out.println("Parent ID: " + currentParentId);
         }
 
         return currentParentId;
     }
 
-    private void processAddressTable(JsonNode payload, TableConfig table, String parentId) {
-        if (parentId == null) {
-            System.err.println("  ✗ No parent ID");
-            return;
-        }
+    private void processAddressTable(JsonNode payload,
+                                     TableConfig table,
+                                     String parentId) {
 
-        System.out.println("  Parent: " + parentId + " (field: " + table.getParentIdField() + ")");
+        if (parentId == null) return;
 
         String eventName = table.getMappingKey().replace("_ADDR", "");
 
-        AddressConfig addrCfg = addrLoader.get(eventName);
-        if (addrCfg == null) {
-            System.err.println("  ✗ No address config for " + eventName);
-            return;
-        }
+        AddressConfig cfg = addrLoader.get(eventName);
+        if (cfg == null) return;
 
-        List<Map<String,Object>> addresses = addrBuilder.build(payload, addrCfg, parentId);
-        System.out.println("  Addresses: " + addresses.size());
+        List<Map<String, Object>> addresses =
+                addrBuilder.build(payload, cfg, parentId);
 
-        int i = 0;
-        for(Map<String,Object> addr : addresses) {
-            i++;
+        for (Map<String, Object> addr : addresses) {
+
             addr.put(table.getParentIdField(), parentId);
-            convertDatesToTimestamp(addr);
+            addr.put("ID", UUID.randomUUID().toString());
 
-            String sqlStatement = sql.get(table.getSqlKey());
-            if (sqlStatement == null) {
-                System.err.println("  ✗ No SQL for " + table.getSqlKey());
-                continue;
-            }
-
-            repo.insert(sqlStatement, addr);
-            System.out.println("  ✓ [" + i + "] " + addr.get("ADDR_TYPE"));
+            repo.insert(sql.get(table.getSqlKey()), addr);
         }
     }
 
-    private String extractParentId(Map<String,Object> data) {
-        String[] idFields = {"TRAN_ID", "ACCT_INFO_ID", "TRANSACTION_ID", "ID"};
-        for (String field : idFields) {
-            Object value = data.get(field);
-            if (value != null) {
-                return value.toString();
-            }
-        }
-        return UUID.randomUUID().toString();
+    private String extractParentId(Map<String, Object> data) {
+        Object id = data.get("TRAN_ID");
+        return id != null ? id.toString() : UUID.randomUUID().toString();
     }
 
-    private void convertDatesToTimestamp(Map<String,Object> data) {
-        for (Map.Entry<String,Object> entry : data.entrySet()) {
-            String key = entry.getKey();
-            Object value = entry.getValue();
+    private void convertDatesToTimestamp(Map<String, Object> data) {
 
-            if ((key.endsWith("_DT") || key.endsWith("_TS") ||
-                    key.contains("_CRTE_") || key.contains("DATE") || key.contains("_LOC_DT"))
-                    && value instanceof String) {
+        for (String key : data.keySet()) {
+
+            Object value = data.get(key);
+
+            if (value instanceof String str &&
+                    (key.endsWith("_DT") || key.endsWith("_TS"))) {
+
                 try {
-                    String dateStr = (String) value;
-                    Instant instant;
-
-                    if (dateStr.contains("T")) {
-                        instant = Instant.parse(dateStr.endsWith("Z") ? dateStr : dateStr + "Z");
-                    } else {
-                        instant = Instant.parse(dateStr);
-                    }
-
+                    Instant instant = Instant.parse(str);
                     data.put(key, Timestamp.from(instant));
-                    System.out.println("  Date: " + key + " → " + dateStr);
-                } catch (Exception e) {
-                    System.err.println("  Date error: " + key + " = " + value);
-                }
+                } catch (Exception ignored) {}
             }
         }
     }

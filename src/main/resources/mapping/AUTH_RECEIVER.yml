@@ -1,0 +1,16 @@
+txnType: AUTH_RECEIVER
+mandatory:
+  - TRAN_ID
+mapping:
+  TRAN_ID: $.authorizationId
+  TRAN_CRTE_DT: $.authorizationDateTime
+  SEND_ACCT_URI: $.receiverAccountUri
+  SEND_ACCT_NUM: $.receiverAccountNumber
+  SEND_FIRST_NAM: $.receiverFirstName
+  SEND_LST_NAM: $.receiverLastName
+  SEND_ST_LINE1: $.receiverAddressLine1
+  SEND_ST_LINE2: $.receiverAddressLine2
+  SEND_CITY: $.receiverCity
+  SEND_ST: $.receiverState
+  SEND_CNTRY_NAM: $.receiverCountry
+  SEND_POST_CD: $.receiverPostalCode

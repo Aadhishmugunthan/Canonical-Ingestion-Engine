@@ -3,6 +3,7 @@ mandatory:
   - TRAN_ID
 mapping:
   TRAN_ID: $.accountInformationId
+  TRAN_CRTE_DT: $.transactionLocalDateTime
   PAYMT_REF: $.referenceId
   UNQ_TRAN_REF: $.correlationId
   FUND_SRC: $.partnerName

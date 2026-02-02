@@ -14,8 +14,8 @@ import java.util.TimeZone;
 @Component
 public class CanonicalMapper {
 
-    // Oracle date format: DD-MON-YYYY HH24:MI:SS
-    private static final SimpleDateFormat ORACLE_DATE_FORMAT = new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss");
+    // Oracle date format: DD-MON-YYYY HH:MI:SS AM (12-hour format)
+    private static final SimpleDateFormat ORACLE_DATE_FORMAT = new SimpleDateFormat("dd-MMM-yyyy hh:mm:ss a");
 
     static {
         ORACLE_DATE_FORMAT.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -62,7 +62,7 @@ public class CanonicalMapper {
         try {
             // Parse ISO-8601 format (e.g., "2026-01-22T10:30:00Z")
             Instant instant = Instant.parse(isoDate);
-            // Convert to Oracle format
+            // Convert to Oracle format with 12-hour time
             return ORACLE_DATE_FORMAT.format(java.util.Date.from(instant));
         } catch (Exception e) {
             // If parsing fails, try as-is or return null

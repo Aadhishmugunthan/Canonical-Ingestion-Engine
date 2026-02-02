@@ -1,0 +1,25 @@
+txnType: PAYMENT
+pkRule: TRAN_ID + "_" + ADDR_TYPE
+addresses:
+  - type: PAYER
+    rootPath: $
+    fields:
+      ST_LINE1: $.payerAddressLine1
+      ST_LINE2: $.payerAddressLine2
+      CITY: $.payerCity
+      ST: $.payerState
+      CNTRY_NAM: $.payerCountry
+      POST_CD: $.payerPostalCode
+      ADDR_STAT: $.payerAddressStatus
+      POST_CD_STAT: $.payerPostalStatus
+  - type: PAYEE
+    rootPath: $
+    fields:
+      ST_LINE1: $.payeeAddressLine1
+      ST_LINE2: $.payeeAddressLine2
+      CITY: $.payeeCity
+      ST: $.payeeState
+      CNTRY_NAM: $.payeeCountry
+      POST_CD: $.payeePostalCode
+      ADDR_STAT: $.payeeAddressStatus
+      POST_CD_STAT: $.payeePostalStatus

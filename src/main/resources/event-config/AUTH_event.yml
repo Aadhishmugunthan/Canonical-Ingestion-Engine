@@ -1,0 +1,25 @@
+eventName: AUTH
+
+tables:
+  - type: main
+    mappingKey: AUTH
+    sqlKey: AVS
+
+  - type: detail
+    mappingKey: AUTH_DTL
+    sqlKey: AVS_DTL
+
+  # ✅ Insert Sender row
+  - type: detail
+    mappingKey: AUTH_SENDER
+    sqlKey: AVS_RECIP
+
+  # ✅ Insert Receiver row
+  - type: detail
+    mappingKey: AUTH_RECEIVER
+    sqlKey: AVS_RECIP
+
+  - type: address
+    mappingKey: AUTH_ADDR
+    sqlKey: AVS_ADDR
+    parentIdField: TRAN_ID

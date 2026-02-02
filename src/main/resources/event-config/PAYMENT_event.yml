@@ -1,0 +1,24 @@
+eventName: PAYMENT
+description: Payment transactions
+tables:
+  - mappingKey: PAYMENT
+    sqlKey: AVS
+    order: 1
+    type: main
+  - mappingKey: PAYMENT_DTL
+    sqlKey: AVS_DTL
+    order: 2
+    type: detail
+  - mappingKey: PAYMENT_SENDER
+    sqlKey: AVS_RECIP
+    order: 3
+    type: detail
+  - mappingKey: PAYMENT_RECEIVER
+    sqlKey: AVS_RECIP
+    order: 4
+    type: detail
+  - mappingKey: PAYMENT_ADDR
+    sqlKey: AVS_ADDR
+    order: 5
+    type: address
+    parentIdField: TRAN_ID

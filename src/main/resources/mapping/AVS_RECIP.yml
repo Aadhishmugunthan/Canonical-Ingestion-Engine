@@ -5,13 +5,11 @@ mandatory:
 
 mapping:
   TRAN_ID: $.avsTranId
-
+  TRAN_CRTE_DT: $.createDate
   SEND_FIRST_NAM: $.frstNam
   SEND_LST_NAM: $.lstNam
-
   SEND_ACCT_NUM: $.acctNum
   SEND_ACCT_URI: $.accountUri
-
   SEND_ST_LINE1: $.stLn1Addr
   SEND_ST_LINE2: $.stLn2Addr
   SEND_CITY: $.cityNam

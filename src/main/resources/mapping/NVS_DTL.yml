@@ -3,6 +3,7 @@ mandatory:
   - TRAN_ID
 mapping:
   TRAN_ID: $.nvsTranId
+  TRAN_CRTE_DT: $.createDate
   PAYMT_REF: $.avsExtRefId
   UNQ_TRAN_REF: $.requestId
   FUND_SRC: $.partnerNm

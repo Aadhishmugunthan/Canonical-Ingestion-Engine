@@ -1,0 +1,20 @@
+txnType: PAYMENT
+mandatory:
+  - TRAN_ID
+  - TRAN_TYPE
+mapping:
+  TRAN_ID: $.paymentId
+  TRAN_TYPE: $.transactionType
+  CUR_STAT: $.paymentStatus
+  ORIG_STAT: $.originalStatus
+  ACCT_NUM: $.accountNumber
+  NTWRK_CD: $.network
+  NTWRK_RESP_CD: $.networkResponseCode
+  NTWRK_RESP_CD_DESC: $.networkResponseDescription
+  SW_SER_NUM: $.switchSerialNumber
+  ORIG_INST_ID: $.originatingInstitutionId
+  ORIG_INST_NAM: $.originatingInstitutionName
+  TRANFR_ACPT_NAM: $.beneficiaryName
+  TRANFR_ACPT_ID: $.beneficiaryId
+  CORLTN_ID: $.correlationId
+  TRAN_CRTE_DT: $.paymentDateTime
