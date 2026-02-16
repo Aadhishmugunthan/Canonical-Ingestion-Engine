@@ -1,0 +1,38 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521/XEPDB1
+    username: system
+    password: 1234
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 5
+      connection-test-query: SELECT 1 FROM DUAL
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.OracleDialect
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: refresh,health,info
+
+  jdbc:
+    template:
+      fetch-size: 100
+
+ingestion:
+  mapping-path: classpath:/mapping
+  sql-path: classpath:/sql
+  rules-path: classpath:/rules
+
+
+logging:
+  level:
+    org.springframework.jdbc.core: DEBUG
