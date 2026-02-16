@@ -1,0 +1,92 @@
+---
+# AVS Event Rules - Complete Set
+
+# Rule 1: Ignore Update Operations
+- name: "AVS - Ignore Update Operations"
+  description: "Ignore events with UPDATE operation in metadata"
+  priority: 1
+  condition: "eventMetadata.contains('\"operation\":\"U\"')"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('🚫 Rule: Ignoring UPDATE operation for event: ' + envelope.getEventId())"
+
+# Rule 2: Ignore Delete Operations
+- name: "AVS - Ignore Delete Operations"
+  description: "Ignore events with DELETE operation in metadata"
+  priority: 1
+  condition: "eventMetadata.contains('\"operation\":\"D\"')"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('🚫 Rule: Ignoring DELETE operation for event: ' + envelope.getEventId())"
+
+# Rule 3: Validate Required Metadata
+- name: "AVS - Validate Required Metadata"
+  description: "Ensure eventMetadata is not null or empty"
+  priority: 2
+  condition: "eventMetadata == null || eventMetadata.trim().isEmpty()"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('⚠️  Rule: Ignoring event with missing metadata: ' + envelope.getEventId())"
+
+# Rule 4: Ignore Test Events
+- name: "AVS - Ignore Test Events"
+  description: "Ignore events from test environments"
+  priority: 1
+  condition: "eventSource != null && eventSource.toLowerCase().contains('test')"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('🧪 Rule: Ignoring TEST event: ' + envelope.getEventId())"
+
+# Rule 5: Validate Event Payload
+- name: "AVS - Validate Payload"
+  description: "Ensure event payload is not empty"
+  priority: 2
+  condition: "eventPayload == null || eventPayload.trim().isEmpty() || eventPayload.equals('{}') || eventPayload.equals('null')"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('⚠️  Rule: Ignoring event with empty payload: ' + envelope.getEventId())"
+
+# Rule 6: Default ACQ_ICA to 0 if Non-Numeric
+- name: "AVS - Default ACQ_ICA to 0 if Non-Numeric"
+  description: "Set acquiringICA to 0 if value is non-numeric"
+  priority: 3
+  condition: "eventPayload.contains('acquiringICA') && eventPayload.contains('\"acquiringICA\":\"') && !eventPayload.matches('.*\"acquiringICA\":\"[0-9]+\".*')"
+  actions:
+    - "envelope.setEventPayload(eventPayload.replaceAll('\"acquiringICA\":\"[^\"]*\"', '\"acquiringICA\":\"0\"'))"
+    - "System.out.println('🔧 Rule: Set ACQ_ICA to default value 0 for event: ' + envelope.getEventId())"
+
+# Rule 7: Ignore if Transaction ID Missing
+- name: "AVS - Ignore if Transaction ID Missing"
+  description: "Ignore events where avsTranId is missing or null"
+  priority: 1
+  condition: "!eventPayload.contains('avsTranId') || eventPayload.contains('\"avsTranId\":null') || eventPayload.contains('\"avsTranId\":\"\"')"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('⚠️  Rule: Ignoring event with missing avsTranId: ' + envelope.getEventId())"
+
+# Rule 8: Validate Event Source (NEW)
+- name: "AVS - Validate Event Source"
+  description: "Ignore events from non-allowed event sources"
+  priority: 1
+  condition: "eventSource == null || (!eventSource.toUpperCase().contains('AVS') && !eventSource.toUpperCase().contains('AIS') && !eventSource.toUpperCase().contains('NVS'))"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('⚠️  Rule: Ignoring event from invalid source: ' + eventSource + ' for event: ' + envelope.getEventId())"
+
+# Rule 9: Validate Regulatory Region (NEW)
+- name: "AVS - Validate Regulatory Region"
+  description: "Ignore events from non-allowed regulatory regions (STL, ATL only)"
+  priority: 1
+  condition: "regulatoryRegion == null || (!regulatoryRegion.equalsIgnoreCase('STL') && !regulatoryRegion.equalsIgnoreCase('ATL'))"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('⚠️  Rule: Ignoring event from invalid regulatory region: ' + regulatoryRegion + ' for event: ' + envelope.getEventId())"
+
+# Rule 10: Validate Operation Type (NEW)
+- name: "AVS - Validate Operation Type"
+  description: "Only allow operation type 'A' (Add), ignore all others"
+  priority: 1
+  condition: "!eventMetadata.contains('\"operation\":\"A\"')"
+  actions:
+    - "envelope.setIgnore(true)"
+    - "System.out.println('⚠️  Rule: Ignoring event with non-ADD operation for event: ' + envelope.getEventId())"

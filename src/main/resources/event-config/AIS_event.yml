@@ -1,21 +1,108 @@
-
 eventName: AIS
 description: Account Information Service transactions
+
 tables:
-  - mappingKey: AIS
-    sqlKey: AVS
+
+  # ===== TABLE 1: AIS_TRANSACTIONS (Main Table) =====
+  - tableName: SEND_TRANSACTIONS
     order: 1
     type: main
-  - mappingKey: AIS_DTL
-    sqlKey: AVS_DTL
+    mandatory:
+      - TRAN_ID
+      - TRAN_TYPE
+
+    mapping:
+      TRAN_ID: $.accountInformationId
+      TRAN_TYPE: $.transactionType
+      CUR_STAT: $.sendingAccountEligible.responseReasonCode
+      ORIG_STAT: $.receivingAccountEligible.eligible
+      ACCT_NUM: $.accountUri
+      NTWRK_CD: $.network
+      NTWRK_RESP_CD: $.brand
+      NTWRK_RESP_CD_DESC: $.acceptanceBrand
+      SW_SER_NUM: $.referenceId
+      ORIG_INST_ID: $.partnerId
+      ORIG_INST_NAM: $.partnerName
+      TRANFR_ACPT_NAM: $.institution
+      TRANFR_ACPT_ID: $.partnerId
+      CORLTN_ID: $.correlationId
+      TRAN_CRTE_DT: $.transactionLocalDateTime
+
+
+  # ===== TABLE 2: AIS_TRAN_DTL (Detail Table) =====
+  - tableName: SEND_TRAN_DTL
     order: 2
     type: detail
-  - mappingKey: AIS_RECIP
-    sqlKey: AVS_RECIP
+    parentIdField: TRAN_ID
+
+    mandatory:
+      - TRAN_ID
+
+    mapping:
+      TRAN_ID: $.accountInformationId
+      TRAN_CRTE_DT: $.transactionLocalDateTime
+      PAYMT_REF: $.referenceId
+      UNQ_TRAN_REF: $.correlationId
+      FUND_SRC: $.partnerName
+      TRAN_PRPS: $.paymentType
+      ORIG_RQST_PYLD: $.originalRequestPayload
+      ORIG_RESP_PYLD: $.originalResponsePayload
+      PROC_ID: $.partnerId
+      ACQ_ICA: $.brand
+      ACQ_IDEN_CD: $.acceptanceBrand
+      EVENT_ID: $.correlationId
+      EVENT_TS: $.transactionLocalDateTime
+      EVENT_CORLTN_ID: $.correlationId
+
+
+  # ===== TABLE 3: AIS_RECIP_DTL (Recipient Table) =====
+  - tableName: SEND_RECIP_DTL
     order: 3
-    type: detail
-  - mappingKey: AIS_ADDR
-    sqlKey: AVS_ADDR
+    type: recipient
+    parentIdField: TRAN_ID
+    autoGenerateId: true
+
+    mandatory:
+      - TRAN_ID
+
+    mapping:
+      TRAN_ID: $.accountInformationId
+      TRAN_CRTE_DT: $.transactionLocalDateTime
+      SEND_FIRST_NAM: $.sendingAccountEligible.responseReasonCode
+      SEND_LST_NAM: $.sendingAccountEligible.responseReasonDetail
+      SEND_ACCT_NUM: $.accountUri
+      SEND_ACCT_URI: $.accountUri
+      SEND_ST_LINE1: $.institution
+      SEND_CITY: $.country
+      SEND_CNTRY_NAM: $.country
+      SEND_POST_CD: $.accountStatementCurrency
+
+
+  # ===== TABLE 4: AIS_TRAN_ADDR_DTL (Address Table) =====
+  - tableName: SEND_TRAN_ADDR_DTL
     order: 4
     type: address
     parentIdField: TRAN_ID
+    autoGenerateId: true
+
+    addressTypes:
+
+      - type: INSTITUTION
+        rootPath: $
+        fields:
+          ST_LINE1: $.institution
+          CITY: $.country
+          CNTRY_NAM: $.country
+          POST_CD: $.accountStatementCurrency
+          ADDR_STAT: $.accountType
+
+      - type: ACCOUNT
+        rootPath: $
+        fields:
+          ST_LINE1: $.accountUri
+          ST_LINE2: $.accountType
+          CITY: $.network
+          ST: $.brand
+          CNTRY_NAM: $.country
+          POST_CD: $.accountStatementCurrency
+          ADDR_STAT: $.sendingAccountEligible.eligible

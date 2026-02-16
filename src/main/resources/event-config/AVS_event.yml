@@ -1,20 +1,114 @@
 eventName: AVS
 description: Address Verification Service transactions
+
+# Define all tables and their mappings in ONE place
 tables:
-  - mappingKey: AVS
-    sqlKey: AVS
+
+  # ===== TABLE 1: SEND_TRANSACTIONS (Main Table) =====
+  - tableName: SEND_TRANSACTIONS
     order: 1
     type: main
-  - mappingKey: AVS_DTL
-    sqlKey: AVS_DTL
+    mandatory:
+      - TRAN_ID
+      - TRAN_TYPE
+    mapping:
+      TRAN_ID: $.avsTranId
+      TRAN_TYPE: $.transactionType
+      CUR_STAT: $.cvcStatCd
+      ORIG_STAT: $.avsRespCd
+      ACCT_NUM: $.acctNum
+      NTWRK_CD: $.network
+      NTWRK_RESP_CD: $.networkResponseCode
+      NTWRK_RESP_CD_DESC: $.networkResponseCodeDesc
+      SW_SER_NUM: $.switchSerialNumber
+      ORIG_INST_ID: $.originatingInstId
+      ORIG_INST_NAM: $.originatingInstName
+      TRANFR_ACPT_NAM: $.transferAccptName
+      TRANFR_ACPT_ID: $.transferAccptId
+      CORLTN_ID: $.correlationId
+      TRAN_CRTE_DT: $.createDate
+
+  # ===== TABLE 2: SEND_TRAN_DTL (Detail Table) =====
+  - tableName: SEND_TRAN_DTL
     order: 2
     type: detail
-  - mappingKey: AVS_RECIP
-    sqlKey: AVS_RECIP
+    parentIdField: TRAN_ID
+    mandatory:
+      - TRAN_ID
+    mapping:
+      TRAN_ID: $.avsTranId
+      TRAN_CRTE_DT: $.createDate
+      PAYMT_REF: $.avsExtRefId
+      UNQ_TRAN_REF: $.requestId
+      FUND_SRC: $.partnerName
+      TRAN_PRPS: $.busnPrtnrRefId
+      ORIG_RQST_PYLD: $.originalRequestPayload
+      ORIG_RESP_PYLD: $.originalResponsePayload
+      PROC_ID: $.processorId
+      ACQ_ICA: $.acquiringICA
+      ACQ_IDEN_CD: $.acquiringIdentificationCode
+      EVENT_ID: $.avsExtRefId
+      EVENT_TS: $.createDate
+      EVENT_CORLTN_ID: $.correlationId
+
+  # ===== TABLE 3: SEND_RECIP_DTL (Recipient Table) =====
+  - tableName: SEND_RECIP_DTL
     order: 3
-    type: detail
-  - mappingKey: AVS_ADDR
-    sqlKey: AVS_ADDR
+    type: recipient
+    parentIdField: TRAN_ID
+    autoGenerateId: true  # This tells us to add UUID for ID column
+    mandatory:
+      - TRAN_ID
+    mapping:
+      TRAN_ID: $.avsTranId
+      TRAN_CRTE_DT: $.createDate
+      SEND_FIRST_NAM: $.frstNam
+      SEND_LST_NAM: $.lstNam
+      SEND_ACCT_NUM: $.acctNum
+      SEND_ACCT_URI: $.accountUri
+      SEND_ST_LINE1: $.stLn1Addr
+      SEND_ST_LINE2: $.stLn2Addr
+      SEND_CITY: $.cityNam
+      SEND_ST: $.stPrvncCd
+      SEND_CNTRY_NAM: $.cntryCd
+      SEND_POST_CD: $.postCd
+
+  # ===== TABLE 4: SEND_TRAN_ADDR_DTL (Address Table) =====
+  - tableName: SEND_TRAN_ADDR_DTL
     order: 4
     type: address
     parentIdField: TRAN_ID
+    autoGenerateId: true
+    # Address types we want to insert
+    addressTypes:
+      - type: HOME
+        rootPath: $
+        fields:
+          ST_LINE1: $.stLn1Addr
+          ST_LINE2: $.stLn2Addr
+          CITY: $.cityNam
+          ST: $.stPrvncCd
+          CNTRY_NAM: $.cntryCd
+          POST_CD: $.postCd
+          ADDR_STAT: $.addrStatCd
+          POST_CD_STAT: $.postStatCd
+
+      - type: BILLING
+        rootPath: $
+        fields:
+          ST_LINE1: $.billingAddr1
+          ST_LINE2: $.billingAddr2
+          CITY: $.billingCity
+          ST: $.billingState
+          CNTRY_NAM: $.billingCountry
+          POST_CD: $.billingZip
+
+      - type: MAILING
+        rootPath: $
+        fields:
+          ST_LINE1: $.mailingAddr1
+          ST_LINE2: $.mailingAddr2
+          CITY: $.mailingCity
+          ST: $.mailingState
+          CNTRY_NAM: $.mailingCountry
+          POST_CD: $.mailingZip

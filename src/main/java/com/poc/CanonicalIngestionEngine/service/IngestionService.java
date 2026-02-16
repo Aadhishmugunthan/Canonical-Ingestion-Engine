@@ -5,109 +5,103 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.CanonicalIngestionEngine.config.EventConfig;
 import com.poc.CanonicalIngestionEngine.config.EventConfigLoader;
 import com.poc.CanonicalIngestionEngine.config.TableConfig;
-import com.poc.CanonicalIngestionEngine.mapping.*;
+import com.poc.CanonicalIngestionEngine.mapping.DataMapper;
 import com.poc.CanonicalIngestionEngine.model.EventEnvelope;
 import com.poc.CanonicalIngestionEngine.repository.TransactionRepository;
 import com.poc.CanonicalIngestionEngine.rules.RuleEngine;
-import com.poc.CanonicalIngestionEngine.sql.SqlCache;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.poc.CanonicalIngestionEngine.sql.DynamicSqlBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.Timestamp;
-import java.time.Instant;
 import java.util.*;
 
 @Service
 public class IngestionService {
 
-    @Autowired ObjectMapper mapper;
-    @Autowired RuleEngine rules;
-    @Autowired MappingLoader mappingLoader;
-    @Autowired AddressConfigLoader addrLoader;
-    @Autowired CanonicalMapper cm;
-    @Autowired TransactionRepository repo;
-    @Autowired AddressBuilder addrBuilder;
-    @Autowired SqlCache sql;
-    @Autowired EventConfigLoader eventConfigLoader;
+    private final ObjectMapper objectMapper;
+    private final RuleEngine ruleEngine;
+    private final EventConfigLoader eventConfigLoader;
+    private final DataMapper dataMapper;
+    private final DynamicSqlBuilder sqlBuilder;
+    private final TransactionRepository repository;
+
+    // 🔥 CONSTRUCTOR INJECTION (CRITICAL FIX)
+    public IngestionService(
+            ObjectMapper objectMapper,
+            RuleEngine ruleEngine,
+            EventConfigLoader eventConfigLoader,
+            DataMapper dataMapper,
+            DynamicSqlBuilder sqlBuilder,
+            TransactionRepository repository
+    ) {
+        this.objectMapper = objectMapper;
+        this.ruleEngine = ruleEngine;
+        this.eventConfigLoader = eventConfigLoader;
+        this.dataMapper = dataMapper;
+        this.sqlBuilder = sqlBuilder;
+        this.repository = repository;
+    }
 
     @Transactional
-    public void ingest(String json) throws Exception {
+    public void ingest(String jsonString) throws Exception {
 
-        System.out.println("\n========== INGESTION START ==========");
+        EventEnvelope envelope = objectMapper.readValue(jsonString, EventEnvelope.class);
 
-        EventEnvelope env = mapper.readValue(json, EventEnvelope.class);
+        ruleEngine.apply(envelope);
 
-        System.out.println("Event: " + env.getEventName() + " (ID: " + env.getEventId() + ")");
-
-        rules.apply(env);
-        if (env.isIgnore()) {
-            System.out.println("IGNORED by rules");
+        if (envelope.isIgnore()) {
             return;
         }
 
-        EventConfig eventConfig = eventConfigLoader.get(env.getEventName());
+        EventConfig eventConfig = eventConfigLoader.get(envelope.getEventName());
+
         if (eventConfig == null) {
-            throw new RuntimeException("No config for: " + env.getEventName());
+            throw new RuntimeException("No configuration found for event: " + envelope.getEventName());
         }
 
-        JsonNode payload = mapper.readTree(env.getEventPayload());
+        JsonNode payload = objectMapper.readTree(envelope.getEventPayload());
 
         String parentId = null;
-        int count = 0;
 
         for (TableConfig table : eventConfig.getTables()) {
 
-            count++;
-
-            System.out.println("\n[" + count + "/" + eventConfig.getTables().size() + "] "
-                    + table.getMappingKey() + " (" + table.getType() + ")");
-
-            if ("address".equals(table.getType())) {
+            if ("address".equalsIgnoreCase(table.getType())) {
                 processAddressTable(payload, table, parentId);
             } else {
                 parentId = processRegularTable(payload, table, parentId);
             }
         }
-
-        System.out.println("\n✅ SUCCESS");
-        System.out.println("========== INGESTION END ==========\n");
     }
 
     private String processRegularTable(JsonNode payload,
                                        TableConfig table,
                                        String currentParentId) {
 
-        CompiledMapping mapping = mappingLoader.get(table.getMappingKey());
-        if (mapping == null) {
-            System.err.println("✗ No mapping for " + table.getMappingKey());
+        Map<String, Object> data = dataMapper.map(
+                payload,
+                table.getMapping(),
+                table.getMandatory(),
+                table.isAutoGenerateId()
+        );
+
+        if (data == null || data.isEmpty()) {
             return currentParentId;
         }
 
-        Map<String, Object> data = cm.map(payload, mapping);
-        convertDatesToTimestamp(data);
-
-        // ✅ Add unique ID for recipient rows
-        if (table.getMappingKey().contains("RECIP")
-                || table.getMappingKey().contains("SENDER")
-                || table.getMappingKey().contains("RECEIVER")) {
-
-            data.put("ID", UUID.randomUUID().toString());
-            System.out.println("  Added Recipient ID: " + data.get("ID"));
+        if (table.getParentIdField() != null && currentParentId != null) {
+            data.put(table.getParentIdField(), currentParentId);
         }
 
-        String sqlStatement = sql.get(table.getSqlKey());
-        if (sqlStatement == null) {
-            System.err.println("✗ No SQL for " + table.getSqlKey());
-            return currentParentId;
-        }
+        String sql = sqlBuilder.buildInsertSql(
+                table.getTableName(),
+                data.keySet(),
+                table.isAutoGenerateId()
+        );
 
-        repo.insert(sqlStatement, data);
-        System.out.println("✓ Inserted");
+        repository.insert(sql, data);
 
-        if (currentParentId == null && "main".equals(table.getType())) {
+        if ("main".equalsIgnoreCase(table.getType()) && currentParentId == null) {
             currentParentId = extractParentId(data);
-            System.out.println("Parent ID: " + currentParentId);
         }
 
         return currentParentId;
@@ -118,43 +112,39 @@ public class IngestionService {
                                      String parentId) {
 
         if (parentId == null) return;
+        if (table.getAddressTypes() == null) return;
 
-        String eventName = table.getMappingKey().replace("_ADDR", "");
+        for (TableConfig.AddressTypeMapping addressType : table.getAddressTypes()) {
 
-        AddressConfig cfg = addrLoader.get(eventName);
-        if (cfg == null) return;
+            Map<String, Object> addressData = dataMapper.mapAddress(
+                    payload,
+                    addressType.getRootPath(),
+                    addressType.getFields(),
+                    addressType.getType(),
+                    parentId
+            );
 
-        List<Map<String, Object>> addresses =
-                addrBuilder.build(payload, cfg, parentId);
+            if (addressData == null || addressData.isEmpty()) continue;
 
-        for (Map<String, Object> addr : addresses) {
+            Object parentIdValue = addressData.remove("PARENT_ID");
+            addressData.put(table.getParentIdField(), parentIdValue);
 
-            addr.put(table.getParentIdField(), parentId);
-            addr.put("ID", UUID.randomUUID().toString());
+            String sql = sqlBuilder.buildInsertSql(
+                    table.getTableName(),
+                    addressData.keySet(),
+                    true
+            );
 
-            repo.insert(sql.get(table.getSqlKey()), addr);
+            repository.insert(sql, addressData);
         }
     }
 
     private String extractParentId(Map<String, Object> data) {
+
         Object id = data.get("TRAN_ID");
-        return id != null ? id.toString() : UUID.randomUUID().toString();
-    }
+        if (id == null) id = data.get("ID");
+        if (id == null) id = UUID.randomUUID().toString();
 
-    private void convertDatesToTimestamp(Map<String, Object> data) {
-
-        for (String key : data.keySet()) {
-
-            Object value = data.get(key);
-
-            if (value instanceof String str &&
-                    (key.endsWith("_DT") || key.endsWith("_TS"))) {
-
-                try {
-                    Instant instant = Instant.parse(str);
-                    data.put(key, Timestamp.from(instant));
-                } catch (Exception ignored) {}
-            }
-        }
+        return id.toString();
     }
 }

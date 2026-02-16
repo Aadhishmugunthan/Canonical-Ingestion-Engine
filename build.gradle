@@ -1,62 +1,174 @@
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '4.0.1'
-	id 'io.spring.dependency-management' version '1.1.7'
+    id 'java'
+    id 'org.springframework.boot' version '3.2.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'jacoco'
+    id "org.sonarqube" version "4.4.1.3373"
 }
 
 group = 'com.poc'
-version = '0.0.1-SNAPSHOT'
-description = 'Demo project for Spring Boot & Canonical Ingestion Engine'
+version = '1.0.0'
+description = 'Generic event ingestion engine with dynamic SQL generation'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
-	}
-}
-
-configurations {
-	compileOnly {
-		extendsFrom annotationProcessor
-	}
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
 repositories {
-	mavenCentral()
+    mavenCentral()
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jdbc'
-	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-	compileOnly 'org.projectlombok:lombok'
-	developmentOnly 'org.springframework.boot:spring-boot-devtools'
-	runtimeOnly 'com.oracle.database.jdbc:ojdbc11'
-	annotationProcessor 'org.projectlombok:lombok'
-	testImplementation 'org.springframework.boot:spring-boot-starter-data-jdbc-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-    // 🔥 DROOLS (THIS FIXES YOUR ERRORS)
-    implementation 'org.kie:kie-api:8.44.0.Final'
-    implementation 'org.drools:drools-core:8.44.0.Final'
-    implementation 'org.drools:drools-engine:8.44.0.Final'
-    implementation 'org.drools:drools-compiler:8.44.0.Final'
+    // Spring Boot
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 
-
-    // Jackson core
+    // Jackson
     implementation 'com.fasterxml.jackson.core:jackson-databind'
-
-    // 🔥 REQUIRED for YAML mappings
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml'
 
-    implementation 'com.jayway.jsonpath:json-path:2.9.0'
+    // JsonPath
+    implementation 'com.jayway.jsonpath:json-path:2.8.0'
 
-    implementation 'org.drools:drools-mvel:8.44.0.Final'
+    // Easy Rules
+    implementation 'org.jeasy:easy-rules-core:4.1.0'
+    implementation 'org.jeasy:easy-rules-mvel:4.1.0'
 
+    // Oracle JDBC
+    runtimeOnly 'com.oracle.database.jdbc:ojdbc8'
 
-    implementation "org.drools:drools-xml-support:8.44.0.Final"
+    // ===== TESTING =====
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params'
 
+    testImplementation 'org.mockito:mockito-core'
+    testImplementation 'org.mockito:mockito-junit-jupiter'
+    testImplementation 'org.assertj:assertj-core'
+
+    // In-memory DB
+    testImplementation 'com.h2database:h2'
 }
 
-tasks.named('test') {
-	useJUnitPlatform()
+test {
+    useJUnitPlatform() {
+        excludeTags 'integration'
+    }
+
+    include '**/*Test.class'
+    include '**/*Tests.class'
+
+    finalizedBy jacocoTestReport
+}
+
+task integrationTest(type: Test) {
+    useJUnitPlatform() {
+        includeTags 'integration'
+    }
+    shouldRunAfter test
+}
+
+jacoco {
+    toolVersion = "0.8.10"
+}
+
+jacocoTestReport {
+    dependsOn test
+
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+
+    // 🔥 EXCLUDE NON-BUSINESS CLASSES FROM COVERAGE
+    // 🔥 EXCLUDE NON-BUSINESS FILES FROM COVERAGE
+    afterEvaluate {
+        classDirectories.setFrom(files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: [
+                    '**/model/**',          // DTOs
+                    '**/config/**',         // config classes
+                    '**/controller/**',     // controllers (skip)
+                    '**/*Application.*',    // main class
+                    '**/CanonicalIngestionEngineApplication.*'
+            ])
+        }))
+    }
+
+
+    jacocoTestCoverageVerification {
+
+        violationRules {
+            rule {
+                element = 'PACKAGE'
+
+                excludes = [
+                        'com.poc.CanonicalIngestionEngine.controller',
+                        'com.poc.CanonicalIngestionEngine.model',
+                        'com.poc.CanonicalIngestionEngine.config',
+                        'com.poc.CanonicalIngestionEngine'
+                ]
+
+                limit {
+                    minimum = 0.50   // keep 50% or change to 0.80 later
+                }
+            }
+        }
+    }
+
+check.dependsOn jacocoTestCoverageVerification
+
+    sonar {
+        properties {
+            property "sonar.projectKey", "CanonicalIngestionEngine"
+            property "sonar.host.url", "http://localhost:9000"
+            property "sonar.token", "sqp_3187bc4cda69235334ae90e072efc2d52dba5452"
+
+            // 🔥 COVERAGE EXCLUSION (IMPORTANT)
+            property "sonar.coverage.exclusions", """
+            **/model/**,
+            **/config/**,
+            **/controller/**,
+            **/*Application.java,
+            **/EventEnvelope.java
+        """
+        }
+    }
+
+
+    sonarqube {
+        properties {
+            property "sonar.projectKey", "CanonicalIngestionEngine"
+            property "sonar.projectName", "CanonicalIngestionEngine"
+            property "sonar.host.url", "http://localhost:9000"
+            property "sonar.token", "sqp_3187bc4cda69235334ae90e072efc2d52dba5452"
+
+            // 🔥 COVERAGE REPORT PATH
+            property "sonar.coverage.jacoco.xmlReportPaths",
+                    "build/reports/jacoco/test/jacocoTestReport.xml"
+
+            // 🔥 EXCLUDE NON BUSINESS CODE FROM COVERAGE
+            property "sonar.coverage.exclusions", """
+            **/config/**,
+            **/model/**,
+            **/controller/**,
+            **/*Application.java,
+            **/CanonicalIngestionEngineApplication.java
+        """
+
+            // 🔥 ALSO EXCLUDE FROM ANALYSIS (optional)
+            property "sonar.exclusions", """
+            **/config/**,
+            **/model/**,
+            **/controller/**,
+            **/*Application.java
+        """
+        }
+
+    }
+
 }
