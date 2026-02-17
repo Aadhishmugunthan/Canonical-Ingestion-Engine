@@ -52,6 +52,21 @@ dependencies {
 
     // In-memory DB
     testImplementation 'com.h2database:h2'
+
+
+    // Kafka
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Validation
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Actuator (monitoring)
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // JSON (already have jackson but keep boot json)
+    implementation 'org.springframework.boot:spring-boot-starter-json'
+
+
 }
 
 test {
@@ -92,7 +107,8 @@ jacocoTestReport {
             fileTree(dir: it, exclude: [
                     '**/model/**',          // DTOs
                     '**/config/**',         // config classes
-                    '**/controller/**',     // controllers (skip)
+                    '**/listener/**',
+                    '**/controller/**',// controllers (skip)
                     '**/*Application.*',    // main class
                     '**/CanonicalIngestionEngineApplication.*'
             ])
@@ -108,6 +124,7 @@ jacocoTestReport {
 
                 excludes = [
                         'com.poc.CanonicalIngestionEngine.controller',
+                        'com.poc.CanonicalIngestionEngine.listener',
                         'com.poc.CanonicalIngestionEngine.model',
                         'com.poc.CanonicalIngestionEngine.config',
                         'com.poc.CanonicalIngestionEngine'
@@ -133,6 +150,7 @@ check.dependsOn jacocoTestCoverageVerification
             **/model/**,
             **/config/**,
             **/controller/**,
+            **/listener/**,
             **/*Application.java,
             **/EventEnvelope.java
         """
@@ -155,6 +173,7 @@ check.dependsOn jacocoTestCoverageVerification
             property "sonar.coverage.exclusions", """
             **/config/**,
             **/model/**,
+            **/listener/**,
             **/controller/**,
             **/*Application.java,
             **/CanonicalIngestionEngineApplication.java
@@ -164,6 +183,7 @@ check.dependsOn jacocoTestCoverageVerification
             property "sonar.exclusions", """
             **/config/**,
             **/model/**,
+            **/listener/**,
             **/controller/**,
             **/*Application.java
         """

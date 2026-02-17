@@ -15,12 +15,13 @@ public class JacksonConfig {
 
     @Bean
     public ObjectMapper objectMapper() {
+
         ObjectMapper mapper = new ObjectMapper();
 
-        // Don't fail on unknown properties in JSON
+        // Ignore unknown fields in JSON
         mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
-        // Don't write dates as timestamps
+        // Write date as normal string instead of timestamp
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         return mapper;
