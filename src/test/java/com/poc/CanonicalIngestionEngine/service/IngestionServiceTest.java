@@ -18,683 +18,302 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class IngestionServiceTest {
 
-    @Mock
-    private RuleEngine ruleEngine;
+    @Mock private ObjectMapper mapper;
+    @Mock private RuleEngine ruleEngine;
+    @Mock private EventConfigLoader loader;
+    @Mock private DataMapper dataMapper;
+    @Mock private DynamicSqlBuilder sqlBuilder;
+    @Mock private TransactionRepository repository;
 
-    @Mock
-    private EventConfigLoader eventConfigLoader;
+    private IngestionService service;
 
-    @Mock
-    private DataMapper dataMapper;
+    private static final ObjectMapper REAL = new ObjectMapper();
 
-    @Mock
-    private DynamicSqlBuilder sqlBuilder;
-
-    @Mock
-    private TransactionRepository repository;
-
-    private IngestionService ingestionService;
-    private ObjectMapper objectMapper;
-
-    private final String validJson = """
-{
-  "eventName":"AVS",
-  "eventId":"evt-001",
-  "eventSource":"AVS_SERVICE",
-  "correlationId":"corr-001",
-  "eventTimestamp":1738656000000,
-  "eventMetadata":"{\\"operation\\":\\"I\\"}",
-  "eventPayload":"{\\"avsTranId\\":\\"TXN-1\\",\\"transactionType\\":\\"AVS\\"}"
-}
-""";
+    private static final String META_INSERT = "{\"operation\":\"A\"}";
+    private static final String META_UPDATE = "{\"operation\":\"U\"}";
+    private static final String PAYLOAD = "{\"paymentTransactionId\":\"PAY123\"}";
 
     @BeforeEach
-    void setUp() {
-        objectMapper = new ObjectMapper();
-        ingestionService = new IngestionService(
-                objectMapper,
-                ruleEngine,
-                eventConfigLoader,
-                dataMapper,
-                sqlBuilder,
-                repository
+    void setup() {
+        service = new IngestionService(
+                mapper, ruleEngine, loader,
+                dataMapper, sqlBuilder, repository
         );
     }
 
-    // ================= SUCCESS FLOW =================
-    @Test
-    void shouldSuccessfullyIngestAVS() throws Exception {
-        EventConfig config = createEventConfig();
-        Map<String, Object> mappedData = createMappedData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(JsonNode.class), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mappedData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-        doNothing().when(repository).insert(anyString(), anyMap());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, times(1)).insert(anyString(), anyMap());
+    private EventEnvelope env(String meta) {
+        EventEnvelope e = new EventEnvelope();
+        e.setEventId("1");
+        e.setEventName("PAYMENT");
+        e.setEventPayload(PAYLOAD);
+        e.setEventMetadata(meta);
+        return e;
     }
 
-    // ================= RULE IGNORE =================
+    private TableConfig mainTable() {
+        TableConfig t = new TableConfig();
+        t.setTableName("SEND_TRANSACTIONS");
+        t.setType("main");
+        t.setMapping(new HashMap<>());
+        return t;
+    }
+
+    private EventConfig config(TableConfig... tables) {
+        EventConfig c = new EventConfig();
+        c.setTables(Arrays.asList(tables));
+        return c;
+    }
+
+    private void mockJson(String meta) throws Exception {
+        JsonNode metaNode = REAL.readTree(meta);
+        JsonNode payloadNode = REAL.readTree(PAYLOAD);
+
+        when(mapper.readTree(meta)).thenReturn(metaNode);
+        when(mapper.readTree(PAYLOAD)).thenReturn(payloadNode);
+    }
+
+    // helper to create mutable data map
+    private Map<String,Object> tranMap() {
+        Map<String,Object> m = new HashMap<>();
+        m.put("TRAN_ID","PAY123");
+        return m;
+    }
+
+    // ================= IGNORE =================
+
     @Test
-    void shouldSkipWhenIgnoredByRules() throws Exception {
-        doAnswer(invocation -> {
-            EventEnvelope envelope = invocation.getArgument(0);
-            envelope.setIgnore(true);
+    void shouldIgnoreEvent() {
+
+        EventEnvelope e = env(META_INSERT);
+
+        doAnswer(i -> {
+            ((EventEnvelope) i.getArgument(0)).setIgnore(true);
             return null;
         }).when(ruleEngine).apply(any());
 
-        ingestionService.ingest(validJson);
+        service.ingest(e);
 
-        verify(repository, never()).insert(anyString(), anyMap());
+        verify(repository, never()).insert(any(), any());
     }
 
-    // ================= CONFIG MISSING =================
-    @Test
-    void shouldThrowWhenConfigMissing() throws Exception {
-        when(eventConfigLoader.get("AVS")).thenReturn(null);
-        doNothing().when(ruleEngine).apply(any());
-
-        assertThrows(RuntimeException.class, () -> ingestionService.ingest(validJson));
-
-        verify(repository, never()).insert(anyString(), anyMap());
-    }
-
-    // ================= MULTI TABLE =================
-    @Test
-    void shouldProcessMultipleTables() throws Exception {
-        EventConfig config = createMultiTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> detailData = createDetailData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(detailData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-        doNothing().when(repository).insert(anyString(), anyMap());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
-    }
-
-    // ================= ADDRESS TABLE TESTS =================
+    // ================= INSERT =================
 
     @Test
-    void shouldProcessAddressTableWithValidData() throws Exception {
-        EventConfig config = createAddressTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> addressData = createAddressData();
+    void shouldInsertRecord() throws Exception {
 
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(addressData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
+        EventEnvelope e = env(META_INSERT);
+        mockJson(META_INSERT);
 
-        doNothing().when(ruleEngine).apply(any());
-        doNothing().when(repository).insert(anyString(), anyMap());
+        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
+                .thenReturn(tranMap());
 
-        ingestionService.ingest(validJson);
+        when(repository.exists(any(), any(), any())).thenReturn(false);
+        when(sqlBuilder.buildInsertSql(any(), any(), anyBoolean()))
+                .thenReturn("SQL");
 
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
+        service.ingest(e);
+
+        verify(repository).insert(any(), any());
     }
 
     @Test
-    void shouldSkipAddressTableWhenDataMapperReturnsEmpty() throws Exception {
-        EventConfig config = createAddressTableConfig();
-        Map<String, Object> mainData = createMappedData();
+    void shouldSkipDuplicateInsert() throws Exception {
 
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
+        EventEnvelope e = env(META_INSERT);
+        mockJson(META_INSERT);
+
+        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
+                .thenReturn(tranMap());
+
+        when(repository.exists(any(), any(), any())).thenReturn(true);
+
+        service.ingest(e);
+
+        verify(repository, never()).insert(any(), any());
+    }
+
+    // ================= INSERT ERROR =================
+
+    @Test
+    void insertFlow_shouldWrapException() throws Exception {
+
+        EventEnvelope e = env(META_INSERT);
+        mockJson(META_INSERT);
+
+        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
+                .thenThrow(new RuntimeException("mapping failed"));
+
+        assertThrows(IngestionService.IngestionProcessingException.class,
+                () -> service.ingest(e));
+    }
+
+    // ================= ADDRESS EMPTY =================
+
+    @Test
+    void addressInsert_shouldSkipWhenEmpty() throws Exception {
+
+        EventEnvelope e = env(META_INSERT);
+        mockJson(META_INSERT);
+
+        TableConfig main = mainTable();
+
+        TableConfig address = new TableConfig();
+        address.setType("address");
+        address.setTableName("ADDR");
+        address.setParentIdField("TRAN_ID");
+
+        TableConfig.AddressTypeMapping mapping =
+                new TableConfig.AddressTypeMapping();
+        mapping.setType("HOME");
+        mapping.setRootPath("root");
+        mapping.setFields(new HashMap<>());
+
+        address.setAddressTypes(List.of(mapping));
+
+        when(loader.get("PAYMENT")).thenReturn(config(main,address));
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
+                .thenReturn(tranMap());
+
+        when(dataMapper.mapAddress(any(),any(),any(),any(),any()))
                 .thenReturn(Collections.emptyMap());
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
 
-        doNothing().when(ruleEngine).apply(any());
+        service.ingest(e);
 
-        ingestionService.ingest(validJson);
+        verify(repository, never()).insert(eq("ADDR"), any());
+    }
 
-        verify(repository, times(1)).insert(eq("INSERT SQL"), eq(mainData));
+    // ================= ADDRESS EXISTS =================
+
+    @Test
+    void addressInsert_shouldSkipIfExists() throws Exception {
+
+        EventEnvelope e = env(META_INSERT);
+        mockJson(META_INSERT);
+
+        TableConfig main = mainTable();
+
+        TableConfig address = new TableConfig();
+        address.setType("address");
+        address.setTableName("ADDR");
+        address.setParentIdField("TRAN_ID");
+
+        TableConfig.AddressTypeMapping mapping =
+                new TableConfig.AddressTypeMapping();
+        mapping.setType("HOME");
+        mapping.setRootPath("root");
+        mapping.setFields(new HashMap<>());
+
+        address.setAddressTypes(List.of(mapping));
+
+        Map<String,Object> addrData = new HashMap<>();
+        addrData.put("PARENT_ID","PAY123");
+
+        when(loader.get("PAYMENT")).thenReturn(config(main,address));
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
+                .thenReturn(tranMap());
+
+        when(dataMapper.mapAddress(any(),any(),any(),any(),any()))
+                .thenReturn(addrData);
+
+        when(repository.existsWithType(any(),any(),any(),any(),any()))
+                .thenReturn(true);
+
+        service.ingest(e);
+
+        verify(repository, never()).insert(eq("ADDR"), any());
+    }
+
+    // ================= UPDATE =================
+
+    @Test
+    void shouldUpdateExistingRow() throws Exception {
+
+        EventEnvelope e = env(META_UPDATE);
+        mockJson(META_UPDATE);
+
+        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
+                .thenReturn(tranMap());
+
+        when(repository.exists(any(),any(),any())).thenReturn(true);
+        when(sqlBuilder.buildUpdateSql(any(),any(),any())).thenReturn("SQL");
+
+        service.ingest(e);
+
+        verify(repository).update(any(), any());
     }
 
     @Test
-    void shouldSkipAddressTableWhenDataMapperReturnsNull() throws Exception {
-        EventConfig config = createAddressTableConfig();
-        Map<String, Object> mainData = createMappedData();
+    void update_shouldSkipAddressTable() throws Exception {
 
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(null);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
+        EventEnvelope e = env(META_UPDATE);
+        mockJson(META_UPDATE);
 
-        doNothing().when(ruleEngine).apply(any());
+        TableConfig address = new TableConfig();
+        address.setType("address");
 
-        ingestionService.ingest(validJson);
+        when(loader.get("PAYMENT")).thenReturn(config(address));
 
-        verify(repository, times(1)).insert(anyString(), anyMap());
+        service.ingest(e);
+
+        verify(repository, never()).update(any(), any());
     }
 
-    @Test
-    void shouldSkipAddressTableWhenSqlBuilderReturnsNull() throws Exception {
-        EventConfig config = createAddressTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> addressData = createAddressData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(addressData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL")
-                .thenReturn(null);
-
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, times(1)).insert(anyString(), anyMap());
-    }
+    // ================= UPDATE EMPTY DATA =================
 
     @Test
-    void shouldSkipAddressTableWhenSqlBuilderReturnsEmpty() throws Exception {
-        EventConfig config = createAddressTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> addressData = createAddressData();
+    void update_shouldSkipWhenDataEmpty() throws Exception {
 
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(addressData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL")
-                .thenReturn("");
+        EventEnvelope e = env(META_UPDATE);
+        mockJson(META_UPDATE);
 
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, times(1)).insert(anyString(), anyMap());
-    }
-
-    // ================= REGULAR TABLE TESTS =================
-
-    @Test
-    void shouldProcessRegularTableWithValidData() throws Exception {
-        EventConfig config = createRegularTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> regularData = createRegularData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(regularData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-        doNothing().when(repository).insert(anyString(), anyMap());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
-    }
-
-    @Test
-    void shouldSkipRegularTableWhenDataMapperReturnsEmpty() throws Exception {
-        EventConfig config = createRegularTableConfig();
-        Map<String, Object> mainData = createMappedData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
+        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(dataMapper.map(any(), any(), any(), anyBoolean()))
                 .thenReturn(Collections.emptyMap());
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
 
-        doNothing().when(ruleEngine).apply(any());
+        service.ingest(e);
 
-        ingestionService.ingest(validJson);
-
-        verify(repository, times(1)).insert(anyString(), anyMap());
+        verify(repository, never()).update(any(), any());
     }
+
+    // ================= UPDATE NULL TRAN =================
 
     @Test
-    void shouldSkipRegularTableWhenDataMapperReturnsNull() throws Exception {
-        EventConfig config = createRegularTableConfig();
-        Map<String, Object> mainData = createMappedData();
+    void update_shouldSkipWhenTranIdNull() throws Exception {
 
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(null);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
+        EventEnvelope e = env(META_UPDATE);
+        mockJson(META_UPDATE);
 
-        doNothing().when(ruleEngine).apply(any());
+        Map<String,Object> data = new HashMap<>();
 
-        ingestionService.ingest(validJson);
+        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(dataMapper.map(any(), any(), any(), anyBoolean())).thenReturn(data);
 
-        verify(repository, times(1)).insert(anyString(), anyMap());
+        service.ingest(e);
+
+        verify(repository, never()).update(any(), any());
     }
+
+    // ================= CONFIG NULL =================
 
     @Test
-    void shouldSkipRegularTableWhenSqlBuilderReturnsNull() throws Exception {
-        EventConfig config = createRegularTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> regularData = createRegularData();
+    void configNull_shouldThrow() {
 
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(regularData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL")
-                .thenReturn(null);
+        EventEnvelope e = env(META_INSERT);
 
-        doNothing().when(ruleEngine).apply(any());
+        when(loader.get("PAYMENT")).thenReturn(null);
 
-        ingestionService.ingest(validJson);
-
-        verify(repository, times(1)).insert(anyString(), anyMap());
-    }
-
-    @Test
-    void shouldSkipRegularTableWhenSqlBuilderReturnsEmpty() throws Exception {
-        EventConfig config = createRegularTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> regularData = createRegularData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(regularData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL")
-                .thenReturn("");
-
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, times(1)).insert(anyString(), anyMap());
-    }
-
-    // ================= EXTRACT PARENT ID TESTS =================
-
-    @Test
-    void shouldExtractParentIdSuccessfully() throws Exception {
-        EventConfig config = createMultiTableConfig();
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> detailData = createDetailData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(detailData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
-    }
-
-    @Test
-    void shouldHandleNullParentId() throws Exception {
-        EventConfig config = createEventConfig();
-
-        TableConfig childTable = new TableConfig();
-        childTable.setTableName("CHILD_TABLE");
-        childTable.setType("detail");
-        childTable.setOrder(2);
-        childTable.setParentIdField("MISSING_FIELD");
-
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("CHILD_ID", "$.childId");
-        childTable.setMapping(mapping);
-
-        List<TableConfig> tables = new ArrayList<>(config.getTables());
-        tables.add(childTable);
-        config.setTables(tables);
-
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> childData = new HashMap<>();
-        childData.put("CHILD_ID", "CHILD-1");
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(childData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
-    }
-
-    @Test
-    void shouldHandleEmptyParentId() throws Exception {
-        EventConfig config = createEventConfig();
-
-        // Add empty TRAN_ID to main data
-        Map<String, Object> mainData = new HashMap<>();
-        mainData.put("TRAN_ID", "");
-        mainData.put("TRAN_TYPE", "AVS");
-
-        TableConfig childTable = new TableConfig();
-        childTable.setTableName("CHILD_TABLE");
-        childTable.setType("detail");
-        childTable.setOrder(2);
-        childTable.setParentIdField("TRAN_ID");
-
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("CHILD_ID", "$.childId");
-        childTable.setMapping(mapping);
-
-        List<TableConfig> tables = new ArrayList<>(config.getTables());
-        tables.add(childTable);
-        config.setTables(tables);
-
-        Map<String, Object> childData = new HashMap<>();
-        childData.put("CHILD_ID", "CHILD-1");
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(childData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
-    }
-
-    // ================= EMPTY & NULL DATA =================
-
-    @Test
-    void shouldSkipMainTableWhenMappedDataIsEmpty() throws Exception {
-        EventConfig config = createEventConfig();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(Collections.emptyMap());
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, never()).insert(anyString(), anyMap());
-        verify(sqlBuilder, never()).buildInsertSql(anyString(), anySet(), anyBoolean());
-    }
-
-    @Test
-    void shouldSkipMainTableWhenMappedDataIsNull() throws Exception {
-        EventConfig config = createEventConfig();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(null);
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, never()).insert(anyString(), anyMap());
-    }
-
-    @Test
-    void shouldSkipMainTableWhenSqlIsNull() throws Exception {
-        EventConfig config = createEventConfig();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(createMappedData());
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn(null);
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, never()).insert(anyString(), anyMap());
-    }
-
-    @Test
-    void shouldSkipMainTableWhenSqlIsEmpty() throws Exception {
-        EventConfig config = createEventConfig();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(createMappedData());
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("");
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(sqlBuilder, times(1)).buildInsertSql(anyString(), anySet(), anyBoolean());
-    }
-
-    // ================= INVALID JSON =================
-
-    @Test
-    void shouldThrowForInvalidJson() {
-        String invalidJson = "{invalid-json";
-        assertThrows(Exception.class, () -> ingestionService.ingest(invalidJson));
-    }
-
-    @Test
-    void shouldThrowForEmptyJson() {
-        assertThrows(Exception.class, () -> ingestionService.ingest(""));
-    }
-
-    @Test
-    void shouldThrowForNullJson() {
-        assertThrows(Exception.class, () -> ingestionService.ingest(null));
-    }
-
-    @Test
-    void shouldThrowForMissingEventName() {
-        String jsonWithoutEventName = """
-{
-  "eventId":"evt-001",
-  "eventSource":"AVS_SERVICE"
-}
-""";
-        assertThrows(Exception.class, () -> ingestionService.ingest(jsonWithoutEventName));
-    }
-
-    // ================= MIXED SCENARIOS =================
-
-    @Test
-    void shouldProcessMixedTablesWithSomeSkipped() throws Exception {
-        EventConfig config = createComplexConfig();
-
-        Map<String, Object> mainData = createMappedData();
-        Map<String, Object> regularData = createRegularData();
-        Map<String, Object> addressData = createAddressData();
-
-        when(eventConfigLoader.get("AVS")).thenReturn(config);
-        when(dataMapper.map(any(), anyMap(), anyList(), anyBoolean()))
-                .thenReturn(mainData)
-                .thenReturn(regularData)
-                .thenReturn(addressData);
-        when(sqlBuilder.buildInsertSql(anyString(), anySet(), anyBoolean()))
-                .thenReturn("INSERT SQL");
-
-        doNothing().when(ruleEngine).apply(any());
-
-        ingestionService.ingest(validJson);
-
-        verify(repository, atLeastOnce()).insert(anyString(), anyMap());
-    }
-
-    // ================= HELPER METHODS =================
-
-    private EventConfig createEventConfig() {
-        EventConfig config = new EventConfig();
-        config.setEventName("AVS");
-
-        TableConfig mainTable = new TableConfig();
-        mainTable.setTableName("SEND_TRANSACTIONS");
-        mainTable.setType("main");
-        mainTable.setOrder(1);
-        mainTable.setAutoGenerateId(false);
-
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("TRAN_ID", "$.avsTranId");
-        mapping.put("TRAN_TYPE", "$.transactionType");
-        mainTable.setMapping(mapping);
-
-        mainTable.setMandatory(Arrays.asList("TRAN_ID", "TRAN_TYPE"));
-        config.setTables(Arrays.asList(mainTable));
-        return config;
-    }
-
-    private EventConfig createMultiTableConfig() {
-        EventConfig config = createEventConfig();
-
-        TableConfig detailTable = new TableConfig();
-        detailTable.setTableName("SEND_TRAN_DTL");
-        detailTable.setType("detail");
-        detailTable.setOrder(2);
-        detailTable.setParentIdField("TRAN_ID");
-
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("TRAN_ID", "$.avsTranId");
-        mapping.put("PAYMT_REF", "$.avsExtRefId");
-        detailTable.setMapping(mapping);
-
-        List<TableConfig> tables = new ArrayList<>(config.getTables());
-        tables.add(detailTable);
-        config.setTables(tables);
-        return config;
-    }
-
-    private EventConfig createAddressTableConfig() {
-        EventConfig config = createEventConfig();
-
-        TableConfig addressTable = new TableConfig();
-        addressTable.setTableName("SEND_TRAN_ADDR_DTL");
-        addressTable.setType("address");
-        addressTable.setOrder(2);
-        addressTable.setParentIdField("TRAN_ID");
-
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("TRAN_ID", "$.avsTranId");
-        mapping.put("ADDR_LINE1", "$.addrLine1");
-        mapping.put("CITY", "$.city");
-        addressTable.setMapping(mapping);
-
-        List<TableConfig> tables = new ArrayList<>(config.getTables());
-        tables.add(addressTable);
-        config.setTables(tables);
-        return config;
-    }
-
-    private EventConfig createRegularTableConfig() {
-        EventConfig config = createEventConfig();
-
-        TableConfig regularTable = new TableConfig();
-        regularTable.setTableName("SEND_TRAN_REGULAR");
-        regularTable.setType("regular");
-        regularTable.setOrder(2);
-        regularTable.setParentIdField("TRAN_ID");
-
-        Map<String, String> mapping = new HashMap<>();
-        mapping.put("TRAN_ID", "$.avsTranId");
-        mapping.put("DESCRIPTION", "$.description");
-        regularTable.setMapping(mapping);
-
-        List<TableConfig> tables = new ArrayList<>(config.getTables());
-        tables.add(regularTable);
-        config.setTables(tables);
-        return config;
-    }
-
-    private EventConfig createComplexConfig() {
-        EventConfig config = createEventConfig();
-
-        // Add regular table
-        TableConfig regularTable = new TableConfig();
-        regularTable.setTableName("SEND_TRAN_REGULAR");
-        regularTable.setType("regular");
-        regularTable.setOrder(2);
-        regularTable.setParentIdField("TRAN_ID");
-        Map<String, String> regularMapping = new HashMap<>();
-        regularMapping.put("TRAN_ID", "$.avsTranId");
-        regularTable.setMapping(regularMapping);
-
-        // Add address table
-        TableConfig addressTable = new TableConfig();
-        addressTable.setTableName("SEND_TRAN_ADDR_DTL");
-        addressTable.setType("address");
-        addressTable.setOrder(3);
-        addressTable.setParentIdField("TRAN_ID");
-        Map<String, String> addressMapping = new HashMap<>();
-        addressMapping.put("TRAN_ID", "$.avsTranId");
-        addressTable.setMapping(addressMapping);
-
-        List<TableConfig> tables = new ArrayList<>(config.getTables());
-        tables.add(regularTable);
-        tables.add(addressTable);
-        config.setTables(tables);
-        return config;
-    }
-
-    private Map<String, Object> createMappedData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("TRAN_ID", "TXN-1");
-        data.put("TRAN_TYPE", "AVS");
-        return data;
-    }
-
-    private Map<String, Object> createDetailData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("TRAN_ID", "TXN-1");
-        data.put("PAYMT_REF", "REF-001");
-        return data;
-    }
-
-    private Map<String, Object> createAddressData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("TRAN_ID", "TXN-1");
-        data.put("ADDR_LINE1", "123 Main St");
-        data.put("CITY", "Chennai");
-        return data;
-    }
-
-    private Map<String, Object> createRegularData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("TRAN_ID", "TXN-1");
-        data.put("DESCRIPTION", "Regular transaction");
-        return data;
+        assertThrows(IngestionService.IngestionProcessingException.class,
+                () -> service.ingest(e));
     }
 }

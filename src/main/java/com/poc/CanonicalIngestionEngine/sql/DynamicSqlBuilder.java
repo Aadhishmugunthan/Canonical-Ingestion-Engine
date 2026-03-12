@@ -1,82 +1,119 @@
 package com.poc.CanonicalIngestionEngine.sql;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * 🎯 CORE CONCEPT: Dynamic SQL Generation
- *
- * This class generates INSERT SQL statements dynamically based on:
- * 1. Table name from YAML
- * 2. Mapped columns from YAML
- * 3. Actual database columns (fetched from Oracle metadata)
- *
- * Why? To prevent "missing parameter" errors and ensure we only
- * insert columns that actually exist in the database.
- */
 @Component
 public class DynamicSqlBuilder {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private static final Logger log = LoggerFactory.getLogger(DynamicSqlBuilder.class);
 
-    // Cache database columns to avoid repeated queries
+    private final JdbcTemplate jdbcTemplate;
+
+    // Cache DB columns
     private final Map<String, Set<String>> dbColumnCache = new HashMap<>();
 
-    /**
-     * 🔥 Main method: Build INSERT SQL dynamically
-     *
-     * @param tableName - Database table name (e.g., "SEND_TRANSACTIONS")
-     * @param mappedColumns - Columns from YAML mapping (e.g., ["TRAN_ID", "TRAN_TYPE"])
-     * @param autoGenerateId - Whether to add "ID" column automatically
-     * @return Complete INSERT SQL statement
-     */
+    public DynamicSqlBuilder(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    // =========================================================
+    // INSERT SQL BUILDER
+    // =========================================================
     public String buildInsertSql(String tableName,
                                  Set<String> mappedColumns,
                                  boolean autoGenerateId) {
 
-        System.out.println("   🔧 Building SQL for table: " + tableName);
-        System.out.println("      📝 Mapped columns from YAML: " + mappedColumns);
+        log.debug("Building INSERT SQL for table: {}", tableName);
+        log.debug("Incoming mapped columns: {}", mappedColumns);
 
-        // Step 1: Get actual columns from database
         Set<String> dbColumns = getDbColumns(tableName);
-        System.out.println("      💾 DB columns: " + dbColumns);
+        log.debug("DB columns: {}", dbColumns);
 
-        // Step 2: Start with mapped columns
-        Set<String> finalColumns = new HashSet<>(mappedColumns);
+        Set<String> finalColumns = new LinkedHashSet<>(mappedColumns);
 
-        // Step 3: Add ID column if needed (for recipient/address tables)
-        if (autoGenerateId) {
+        // Add ID if needed
+        if (autoGenerateId && dbColumns.contains("ID")) {
             finalColumns.add("ID");
-            System.out.println("      ➕ Added ID column (autoGenerateId=true)");
+            log.debug("Added ID column (autoGenerateId enabled)");
         }
 
-        // Step 4: Filter - keep only columns that exist in DB
+        // Keep only valid DB columns
         finalColumns.retainAll(dbColumns);
-        System.out.println("      ✅ Final columns to insert: " + finalColumns);
 
-        // Step 5: Build SQL
-        String sql = buildSql(tableName, finalColumns);
-        System.out.println("      📜 Generated SQL: " + sql);
+        if (finalColumns.isEmpty()) {
+            throw new IllegalStateException("No valid columns to insert into table: " + tableName);
+        }
+
+        log.debug("Final insert columns: {}", finalColumns);
+
+        String sql = buildInsert(tableName, finalColumns);
+        log.debug("Generated INSERT SQL: {}", sql);
 
         return sql;
     }
 
-    /**
-     * 🔍 Fetch actual column names from Oracle database
-     */
+    // =========================================================
+    // UPDATE SQL BUILDER
+    // =========================================================
+    public String buildUpdateSql(String tableName,
+                                 Set<String> mappedColumns,
+                                 String whereColumn) {
+
+        log.debug("Building UPDATE SQL for table: {}", tableName);
+
+        Set<String> dbColumns = getDbColumns(tableName);
+
+        Set<String> finalColumns = new LinkedHashSet<>(mappedColumns);
+        finalColumns.retainAll(dbColumns);
+
+        if (!finalColumns.contains(whereColumn)) {
+            finalColumns.add(whereColumn);
+        }
+
+        if (finalColumns.isEmpty()) {
+            throw new IllegalStateException("No valid columns available for update: " + tableName);
+        }
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("UPDATE ").append(tableName).append(" SET ");
+
+        boolean first = true;
+
+        for (String col : finalColumns) {
+
+            if (col.equalsIgnoreCase(whereColumn)) continue;
+
+            if (!first) sql.append(", ");
+            sql.append(col).append(" = :").append(col);
+            first = false;
+        }
+
+        sql.append(" WHERE ")
+                .append(whereColumn)
+                .append(" = :")
+                .append(whereColumn);
+
+        String finalSql = sql.toString();
+        log.debug("Generated UPDATE SQL: {}", finalSql);
+
+        return finalSql;
+    }
+
+    // =========================================================
+    // FETCH DB COLUMNS FROM ORACLE
+    // =========================================================
     private Set<String> getDbColumns(String tableName) {
 
-        // Check cache first
         if (dbColumnCache.containsKey(tableName)) {
             return dbColumnCache.get(tableName);
         }
 
-        // Query Oracle metadata
         String sql = "SELECT COLUMN_NAME FROM USER_TAB_COLUMNS WHERE TABLE_NAME = ?";
 
         List<String> columns = jdbcTemplate.queryForList(
@@ -86,35 +123,24 @@ public class DynamicSqlBuilder {
         );
 
         Set<String> columnSet = new HashSet<>(columns);
-
-        // Cache it
         dbColumnCache.put(tableName, columnSet);
+
+        log.debug("Fetched and cached columns for {}: {}", tableName, columnSet);
 
         return columnSet;
     }
 
-    /**
-     * 🛠️ Build the actual INSERT SQL string
-     *
-     * Example output:
-     * INSERT INTO SEND_TRANSACTIONS (TRAN_ID, TRAN_TYPE, ACCT_NUM)
-     * VALUES (:TRAN_ID, :TRAN_TYPE, :ACCT_NUM)
-     */
-    private String buildSql(String tableName, Set<String> columns) {
+    // =========================================================
+    // BUILD INSERT SQL STRING
+    // =========================================================
+    private String buildInsert(String tableName, Set<String> columns) {
 
-        if (columns.isEmpty()) {
-            throw new RuntimeException("No columns to insert for table: " + tableName);
-        }
-
-        // Create comma-separated column list
         String columnList = String.join(", ", columns);
 
-        // Create comma-separated named parameters (:TRAN_ID, :TRAN_TYPE, etc.)
         String valuesList = columns.stream()
                 .map(col -> ":" + col)
                 .collect(Collectors.joining(", "));
 
-        // Build final SQL
         return String.format(
                 "INSERT INTO %s (%s) VALUES (%s)",
                 tableName,
@@ -123,10 +149,11 @@ public class DynamicSqlBuilder {
         );
     }
 
-    /**
-     * 🧹 Clear column cache (useful for testing)
-     */
+    // =========================================================
+    // CLEAR CACHE (for testing)
+    // =========================================================
     public void clearCache() {
         dbColumnCache.clear();
+        log.info("DB column cache cleared");
     }
 }

@@ -1,106 +1,110 @@
 package com.poc.CanonicalIngestionEngine.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.stereotype.Component;
 
-import java.io.File;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-/**
- * Loads all event configuration YAML files at startup.
- * Each YAML file contains complete table mappings for one event type.
- *
- * Example: AVS_event.yml contains all tables for AVS transactions.
- */
+import java.net.URL;
+import java.util.*;
+
 @Component
 public class EventConfigLoader {
 
     private final Map<String, EventConfig> configCache = new HashMap<>();
 
+    private static final List<String> EVENT_FILES = List.of(
+            "AIS_event",
+            "AVS_event",
+            "NVS_event",
+            "PAYMENT_event",
+            "FUNDING_event",
+            "AUTH_event",
+            "CLEARING_event"
+    );
+
+    private static final String CONFIG_SERVER_URL = "http://localhost:8888/";
+
     @PostConstruct
-    public void init() throws Exception {
+    public void init() {
 
         System.out.println("\n========================================");
         System.out.println("🚀 EventConfigLoader: Loading Event Configurations");
         System.out.println("========================================\n");
 
-        ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+        ObjectMapper mapper = new ObjectMapper();
 
-        // Load from resources/event-config directory
-        File configDir = new ClassPathResource("event-config").getFile();
+        for (String eventFile : EVENT_FILES) {
 
-        if (!configDir.exists() || !configDir.isDirectory()) {
-            throw new RuntimeException("event-config directory not found!");
-        }
+            String url = CONFIG_SERVER_URL + eventFile + "/default";
+            System.out.println("📡 Fetching from Config Server: " + url);
 
-        File[] files = configDir.listFiles();
+            try {
 
-        if (files == null || files.length == 0) {
-            System.out.println("⚠️  No event configuration files found");
-            return;
-        }
+                Map<String, Object> response =
+                        mapper.readValue(new URL(url), Map.class);
 
-        // Load each *_event.yml file
-        for (File file : files) {
+                List<Map<String, Object>> propertySources =
+                        (List<Map<String, Object>>) response.get("propertySources");
 
-            if (!file.getName().endsWith("_event.yml")) {
-                System.out.println("⏭️  Skipping: " + file.getName());
-                continue;
+                if (propertySources == null || propertySources.isEmpty()) {
+                    System.out.println("⚠️ No property sources found for: " + eventFile);
+                    continue;
+                }
+
+                Map<String, Object> source =
+                        (Map<String, Object>) propertySources.get(0).get("source");
+
+                Binder binder = new Binder(
+                        new MapConfigurationPropertySource(source)
+                );
+
+                EventConfig config = binder.bind(
+                        "",
+                        Bindable.of(EventConfig.class)
+                ).orElse(null);
+
+                if (config == null) {
+                    System.out.println("⚠️ Failed to bind config for: " + eventFile);
+                    continue;
+                }
+
+                if (config.getTables() != null) {
+                    config.getTables()
+                            .sort(Comparator.comparingInt(TableConfig::getOrder));
+                }
+
+                configCache.put(config.getEventName().toUpperCase(), config);
+
+                System.out.println("✅ Loaded Event: " + config.getEventName());
+
+            } catch (Exception ex) {
+
+                System.out.println("❌ Failed to load config for: " + eventFile);
+                System.out.println("Reason: " + ex.getMessage());
+
             }
-
-            System.out.println("📄 Loading: " + file.getName());
-
-            // Parse YAML into EventConfig object
-            EventConfig config = yamlMapper.readValue(file, EventConfig.class);
-
-            // Sort tables by order
-            config.getTables().sort((a, b) -> Integer.compare(a.getOrder(), b.getOrder()));
-
-            // Cache by event name
-            configCache.put(config.getEventName(), config);
-
-            // Print summary
-            System.out.println("   ✅ Event: " + config.getEventName());
-            System.out.println("   📋 Description: " + config.getDescription());
-            System.out.println("   🗂️  Tables: " + config.getTables().size());
-
-            for (TableConfig table : config.getTables()) {
-                System.out.println("      └─ " + table.getTableName()
-                        + " (type=" + table.getType()
-                        + ", columns=" + (table.getMapping() != null ? table.getMapping().size() : 0)
-                        + ")");
-            }
-
-            System.out.println();
         }
 
-        System.out.println("========================================");
+        System.out.println("\n========================================");
         System.out.println("✅ Loaded " + configCache.size() + " event configuration(s)");
         System.out.println("========================================\n");
     }
 
-    /**
-     * Get configuration for a specific event
-     */
     public EventConfig get(String eventName) {
-        EventConfig config = configCache.get(eventName);
-
-        if (config == null) {
-            System.err.println("❌ No configuration found for event: " + eventName);
-        }
-
-        return config;
+        if (eventName == null) return null;
+        return configCache.get(eventName.toUpperCase());
     }
 
-    /**
-     * Get all loaded configurations
-     */
     public Collection<EventConfig> getAllConfigs() {
         return configCache.values();
+    }
+
+    public boolean contains(String eventName) {
+        if (eventName == null) return false;
+        return configCache.containsKey(eventName.toUpperCase());
     }
 }

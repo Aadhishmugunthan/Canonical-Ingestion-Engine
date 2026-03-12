@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: canonical-ingestion-engine
+  profiles:
+    active: dev
+  config:
+    import: "configserver:http://localhost:8888"

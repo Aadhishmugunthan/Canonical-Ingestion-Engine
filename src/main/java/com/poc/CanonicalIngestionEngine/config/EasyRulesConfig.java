@@ -26,9 +26,3 @@ public class EasyRulesConfig {
         return new DefaultRulesEngine();
     }
 }
-
-
-
-
-
-
