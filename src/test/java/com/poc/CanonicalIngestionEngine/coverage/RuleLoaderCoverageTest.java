@@ -11,7 +11,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class RuleLoaderCoverageTest {
+ class RuleLoaderCoverageTest {
 
     // 🔥 covers init() + missing folder branch
     @Test

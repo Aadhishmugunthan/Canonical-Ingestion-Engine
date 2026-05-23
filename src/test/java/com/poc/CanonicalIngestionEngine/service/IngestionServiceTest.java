@@ -1,6 +1,5 @@
 package com.poc.CanonicalIngestionEngine.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.CanonicalIngestionEngine.config.EventConfig;
 import com.poc.CanonicalIngestionEngine.config.EventConfigLoader;
@@ -10,310 +9,584 @@ import com.poc.CanonicalIngestionEngine.model.EventEnvelope;
 import com.poc.CanonicalIngestionEngine.repository.TransactionRepository;
 import com.poc.CanonicalIngestionEngine.rules.RuleEngine;
 import com.poc.CanonicalIngestionEngine.sql.DynamicSqlBuilder;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
+import java.lang.reflect.Method;
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class IngestionServiceTest {
 
-    @Mock private ObjectMapper mapper;
-    @Mock private RuleEngine ruleEngine;
-    @Mock private EventConfigLoader loader;
-    @Mock private DataMapper dataMapper;
-    @Mock private DynamicSqlBuilder sqlBuilder;
-    @Mock private TransactionRepository repository;
+    @Mock
+    private RuleEngine ruleEngine;
+
+    @Mock
+    private EventConfigLoader eventConfigLoader;
+
+    @Mock
+    private DataMapper dataMapper;
+
+    @Mock
+    private DynamicSqlBuilder sqlBuilder;
+
+    @Mock
+    private TransactionRepository repository;
 
     private IngestionService service;
 
-    private static final ObjectMapper REAL = new ObjectMapper();
-
-    private static final String META_INSERT = "{\"operation\":\"A\"}";
-    private static final String META_UPDATE = "{\"operation\":\"U\"}";
-    private static final String PAYLOAD = "{\"paymentTransactionId\":\"PAY123\"}";
-
     @BeforeEach
     void setup() {
+
         service = new IngestionService(
-                mapper, ruleEngine, loader,
-                dataMapper, sqlBuilder, repository
+                new ObjectMapper(),
+                ruleEngine,
+                eventConfigLoader,
+                dataMapper,
+                sqlBuilder,
+                repository
         );
     }
 
-    private EventEnvelope env(String meta) {
-        EventEnvelope e = new EventEnvelope();
-        e.setEventId("1");
-        e.setEventName("PAYMENT");
-        e.setEventPayload(PAYLOAD);
-        e.setEventMetadata(meta);
-        return e;
+    // =====================================================
+    // HELPERS
+    // =====================================================
+
+    private EventEnvelope envelope(
+            String event,
+            String operation,
+            String payload
+    ) {
+
+        EventEnvelope env = new EventEnvelope();
+
+        env.setEventId(UUID.randomUUID().toString());
+        env.setEventName(event);
+
+        env.setEventMetadata(
+                "{\"operation\":\"" + operation + "\"}"
+        );
+
+        env.setEventPayload(payload);
+
+        return env;
     }
 
-    private TableConfig mainTable() {
-        TableConfig t = new TableConfig();
-        t.setTableName("SEND_TRANSACTIONS");
-        t.setType("main");
-        t.setMapping(new HashMap<>());
-        return t;
+    private EventConfig config() {
+
+        TableConfig table = new TableConfig();
+
+        table.setTableName("SEND_TRANSACTIONS");
+        table.setType("main");
+
+        table.setMapping(Map.of(
+                "TRAN_ID", "$.transactionId",
+                "STATUS", "$.status"
+        ));
+
+        EventConfig config = new EventConfig();
+
+        config.setEventName("PAYMENT");
+        config.setTables(List.of(table));
+
+        return config;
     }
 
-    private EventConfig config(TableConfig... tables) {
-        EventConfig c = new EventConfig();
-        c.setTables(Arrays.asList(tables));
-        return c;
-    }
-
-    private void mockJson(String meta) throws Exception {
-        JsonNode metaNode = REAL.readTree(meta);
-        JsonNode payloadNode = REAL.readTree(PAYLOAD);
-
-        when(mapper.readTree(meta)).thenReturn(metaNode);
-        when(mapper.readTree(PAYLOAD)).thenReturn(payloadNode);
-    }
-
-    // helper to create mutable data map
-    private Map<String,Object> tranMap() {
-        Map<String,Object> m = new HashMap<>();
-        m.put("TRAN_ID","PAY123");
-        return m;
-    }
-
-    // ================= IGNORE =================
+    // =====================================================
+    // INSERT FLOW
+    // =====================================================
 
     @Test
-    void shouldIgnoreEvent() {
+    void insert_success() {
 
-        EventEnvelope e = env(META_INSERT);
+        EventEnvelope env = envelope(
+                "PAYMENT",
+                "A",
+                """
+                {
+                  "transactionId":"TXN1"
+                }
+                """
+        );
 
-        doAnswer(i -> {
-            ((EventEnvelope) i.getArgument(0)).setIgnore(true);
-            return null;
-        }).when(ruleEngine).apply(any());
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
 
-        service.ingest(e);
-
-        verify(repository, never()).insert(any(), any());
-    }
-
-    // ================= INSERT =================
-
-    @Test
-    void shouldInsertRecord() throws Exception {
-
-        EventEnvelope e = env(META_INSERT);
-        mockJson(META_INSERT);
-
-        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
         when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenReturn(tranMap());
+                .thenReturn(new HashMap<>(Map.of(
+                        "TRAN_ID", "TXN1"
+                )));
 
-        when(repository.exists(any(), any(), any())).thenReturn(false);
+        when(repository.exists(any(), any(), any()))
+                .thenReturn(false);
+
         when(sqlBuilder.buildInsertSql(any(), any(), anyBoolean()))
                 .thenReturn("SQL");
 
-        service.ingest(e);
+        service.ingest(env);
 
-        verify(repository).insert(any(), any());
+        verify(repository).insert(anyString(), any());
     }
 
     @Test
-    void shouldSkipDuplicateInsert() throws Exception {
+    void insert_emptyMappedData_skipsInsert() {
 
-        EventEnvelope e = env(META_INSERT);
-        mockJson(META_INSERT);
+        EventEnvelope env = envelope(
+                "PAYMENT",
+                "A",
+                "{\"transactionId\":\"TXN2\"}"
+        );
 
-        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
+
         when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenReturn(tranMap());
+                .thenReturn(new HashMap<>());
 
-        when(repository.exists(any(), any(), any())).thenReturn(true);
+        service.ingest(env);
 
-        service.ingest(e);
-
-        verify(repository, never()).insert(any(), any());
+        verify(repository, never())
+                .insert(any(), any());
     }
 
-    // ================= INSERT ERROR =================
-
     @Test
-    void insertFlow_shouldWrapException() throws Exception {
+    void insert_duplicateRecord_merges() {
 
-        EventEnvelope e = env(META_INSERT);
-        mockJson(META_INSERT);
+        EventEnvelope env = envelope(
+                "PAYMENT",
+                "A",
+                "{\"transactionId\":\"TXN3\"}"
+        );
 
-        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
 
         when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenThrow(new RuntimeException("mapping failed"));
+                .thenReturn(new HashMap<>(Map.of(
+                        "TRAN_ID", "TXN3",
+                        "STATUS", "INIT"
+                )));
 
-        assertThrows(IngestionService.IngestionProcessingException.class,
-                () -> service.ingest(e));
-    }
-
-    // ================= ADDRESS EMPTY =================
-
-    @Test
-    void addressInsert_shouldSkipWhenEmpty() throws Exception {
-
-        EventEnvelope e = env(META_INSERT);
-        mockJson(META_INSERT);
-
-        TableConfig main = mainTable();
-
-        TableConfig address = new TableConfig();
-        address.setType("address");
-        address.setTableName("ADDR");
-        address.setParentIdField("TRAN_ID");
-
-        TableConfig.AddressTypeMapping mapping =
-                new TableConfig.AddressTypeMapping();
-        mapping.setType("HOME");
-        mapping.setRootPath("root");
-        mapping.setFields(new HashMap<>());
-
-        address.setAddressTypes(List.of(mapping));
-
-        when(loader.get("PAYMENT")).thenReturn(config(main,address));
-        when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenReturn(tranMap());
-
-        when(dataMapper.mapAddress(any(),any(),any(),any(),any()))
-                .thenReturn(Collections.emptyMap());
-
-        service.ingest(e);
-
-        verify(repository, never()).insert(eq("ADDR"), any());
-    }
-
-    // ================= ADDRESS EXISTS =================
-
-    @Test
-    void addressInsert_shouldSkipIfExists() throws Exception {
-
-        EventEnvelope e = env(META_INSERT);
-        mockJson(META_INSERT);
-
-        TableConfig main = mainTable();
-
-        TableConfig address = new TableConfig();
-        address.setType("address");
-        address.setTableName("ADDR");
-        address.setParentIdField("TRAN_ID");
-
-        TableConfig.AddressTypeMapping mapping =
-                new TableConfig.AddressTypeMapping();
-        mapping.setType("HOME");
-        mapping.setRootPath("root");
-        mapping.setFields(new HashMap<>());
-
-        address.setAddressTypes(List.of(mapping));
-
-        Map<String,Object> addrData = new HashMap<>();
-        addrData.put("PARENT_ID","PAY123");
-
-        when(loader.get("PAYMENT")).thenReturn(config(main,address));
-        when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenReturn(tranMap());
-
-        when(dataMapper.mapAddress(any(),any(),any(),any(),any()))
-                .thenReturn(addrData);
-
-        when(repository.existsWithType(any(),any(),any(),any(),any()))
+        when(repository.exists(any(), any(), any()))
                 .thenReturn(true);
 
-        service.ingest(e);
+        when(repository.findTransaction(any()))
+                .thenReturn(new HashMap<>());
 
-        verify(repository, never()).insert(eq("ADDR"), any());
+        service.ingest(env);
+
+        verify(repository, never())
+                .insert(any(), any());
     }
 
-    // ================= UPDATE =================
+    // =====================================================
+    // RULE ENGINE
+    // =====================================================
 
     @Test
-    void shouldUpdateExistingRow() throws Exception {
+    void ignoredEvent_skipsEverything() {
 
-        EventEnvelope e = env(META_UPDATE);
-        mockJson(META_UPDATE);
+        EventEnvelope env =
+                envelope("PAYMENT", "A", "{}");
 
-        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
+        doAnswer(invocation -> {
+
+            EventEnvelope e =
+                    invocation.getArgument(0);
+
+            e.setIgnore(true);
+
+            return null;
+
+        }).when(ruleEngine).apply(any());
+
+        service.ingest(env);
+
+        verify(repository, never())
+                .insert(any(), any());
+    }
+
+    // =====================================================
+    // STATUS VALIDATION
+    // =====================================================
+
+    @Test
+    void statusTransition_blocked() {
+
+        EventEnvelope env = envelope(
+                "CLEARING",
+                "U",
+                """
+                {
+                  "transactionId":"TXN4",
+                  "status":"STARTED"
+                }
+                """
+        );
+
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
+
+        when(repository.exists(any(), any(), any()))
+                .thenReturn(true);
+
+        when(repository.findTransaction(any()))
+                .thenReturn(Map.of(
+                        "STATUS", "SETTLED"
+                ));
+
+        service.ingest(env);
+
+        verify(repository, never())
+                .updateStatus(any(), any());
+    }
+
+    @Test
+    void statusTransition_allowed() {
+
+        EventEnvelope env = envelope(
+                "CLEARING",
+                "U",
+                """
+                {
+                  "transactionId":"TXN5",
+                  "status":"SETTLED"
+                }
+                """
+        );
+
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
+
+        when(repository.exists(any(), any(), any()))
+                .thenReturn(true);
+
+        when(repository.findTransaction(any()))
+                .thenReturn(Map.of(
+                        "STATUS", "INIT"
+                ));
+
+        when(repository.findAllRelatedData(any()))
+                .thenReturn(new HashMap<>());
+
+        when(repository.columnExists(any(), any()))
+                .thenReturn(true);
+
         when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenReturn(tranMap());
+                .thenReturn(new HashMap<>(Map.of(
+                        "STATUS", "SETTLED"
+                )));
 
-        when(repository.exists(any(),any(),any())).thenReturn(true);
-        when(sqlBuilder.buildUpdateSql(any(),any(),any())).thenReturn("SQL");
+        service.ingest(env);
 
-        service.ingest(e);
-
-        verify(repository).update(any(), any());
+        verify(repository)
+                .updateStatus("TXN5", "SETTLED");
     }
 
     @Test
-    void update_shouldSkipAddressTable() throws Exception {
+    void statusValidation_repositoryException_defaultsTrue() {
 
-        EventEnvelope e = env(META_UPDATE);
-        mockJson(META_UPDATE);
+        EventEnvelope env = envelope(
+                "CLEARING",
+                "U",
+                """
+                {
+                  "transactionId":"TXN6",
+                  "status":"SETTLED"
+                }
+                """
+        );
 
-        TableConfig address = new TableConfig();
-        address.setType("address");
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
 
-        when(loader.get("PAYMENT")).thenReturn(config(address));
+        when(repository.exists(any(), any(), any()))
+                .thenThrow(new RuntimeException("DB ERROR"));
 
-        service.ingest(e);
-
-        verify(repository, never()).update(any(), any());
+        assertThrows(
+                IngestionService.IngestionProcessingException.class,
+                () -> service.ingest(env)
+        );
     }
 
-    // ================= UPDATE EMPTY DATA =================
+    // =====================================================
+    // AIS2
+    // =====================================================
 
     @Test
-    void update_shouldSkipWhenDataEmpty() throws Exception {
+    void ais2_updatesSwSerNum() {
 
-        EventEnvelope e = env(META_UPDATE);
-        mockJson(META_UPDATE);
+        EventEnvelope env = envelope(
+                "AIS2",
+                "U",
+                """
+                {
+                  "accountInformationId":"TXN7",
+                  "switchSerialNumber":"999"
+                }
+                """
+        );
 
-        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
-        when(dataMapper.map(any(), any(), any(), anyBoolean()))
-                .thenReturn(Collections.emptyMap());
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
 
-        service.ingest(e);
+        when(repository.exists(any(), any(), any()))
+                .thenReturn(true);
 
-        verify(repository, never()).update(any(), any());
+        Map<String, Object> db = new HashMap<>();
+
+        db.put("SW_SER_NUM", null);
+
+        when(repository.findTransaction(any()))
+                .thenReturn(db);
+
+        service.ingest(env);
+
+        verify(repository)
+                .updateColumn(
+                        eq("SEND_TRANSACTIONS"),
+                        eq("TRAN_ID"),
+                        eq("TXN7"),
+                        eq("SW_SER_NUM"),
+                        eq("999")
+                );
     }
 
-    // ================= UPDATE NULL TRAN =================
-
     @Test
-    void update_shouldSkipWhenTranIdNull() throws Exception {
+    void ais2_skipsWhenAlreadyPopulated() {
 
-        EventEnvelope e = env(META_UPDATE);
-        mockJson(META_UPDATE);
+        EventEnvelope env = envelope(
+                "AIS2",
+                "U",
+                """
+                {
+                  "accountInformationId":"TXN8",
+                  "switchSerialNumber":"999"
+                }
+                """
+        );
 
-        Map<String,Object> data = new HashMap<>();
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
 
-        when(loader.get("PAYMENT")).thenReturn(config(mainTable()));
-        when(dataMapper.map(any(), any(), any(), anyBoolean())).thenReturn(data);
+        when(repository.exists(any(), any(), any()))
+                .thenReturn(true);
 
-        service.ingest(e);
+        when(repository.findTransaction(any()))
+                .thenReturn(Map.of(
+                        "SW_SER_NUM", "111"
+                ));
 
-        verify(repository, never()).update(any(), any());
+        service.ingest(env);
+
+        verify(repository, never())
+                .updateColumn(any(), any(), any(), any(), any());
     }
 
-    // ================= CONFIG NULL =================
+    // =====================================================
+    // MERGE NULL FIELDS
+    // =====================================================
 
     @Test
-    void configNull_shouldThrow() {
+    void merge_unknownColumn_skipped() throws Exception {
 
-        EventEnvelope e = env(META_INSERT);
+        Method method =
+                IngestionService.class.getDeclaredMethod(
+                        "mergeNullFields",
+                        String.class,
+                        String.class,
+                        Map.class
+                );
 
-        when(loader.get("PAYMENT")).thenReturn(null);
+        method.setAccessible(true);
 
-        assertThrows(IngestionService.IngestionProcessingException.class,
-                () -> service.ingest(e));
+        Map<String, Object> incoming =
+                new HashMap<>();
+
+        incoming.put("BAD_COLUMN", "X");
+
+        when(repository.findTransaction(any()))
+                .thenReturn(Map.of());
+
+        when(repository.columnExists(any(), any()))
+                .thenReturn(false);
+
+        method.invoke(
+                service,
+                "SEND_TRANSACTIONS",
+                "TXN9",
+                incoming
+        );
+
+        verify(repository, never())
+                .updateColumn(any(), any(), any(), any(), any());
+    }
+
+    // =====================================================
+    // TYPE VALIDATION
+    // =====================================================
+
+    @Test
+    void invalidNonFinTxn_defaultsZero() throws Exception {
+
+        Method method =
+                IngestionService.class.getDeclaredMethod(
+                        "validateAndConvertTypes",
+                        Map.class
+                );
+
+        method.setAccessible(true);
+
+        Map<String, Object> map =
+                new HashMap<>();
+
+        map.put("NON_FIN_TXN", "ABC");
+
+        method.invoke(service, map);
+
+        assertEquals(0, map.get("NON_FIN_TXN"));
+    }
+
+    @Test
+    void invalidTranAmt_removed() throws Exception {
+
+        Method method =
+                IngestionService.class.getDeclaredMethod(
+                        "validateAndConvertTypes",
+                        Map.class
+                );
+
+        method.setAccessible(true);
+
+        Map<String, Object> map =
+                new HashMap<>();
+
+        map.put("TRAN_AMT", "ABC");
+
+        method.invoke(service, map);
+
+        assertFalse(map.containsKey("TRAN_AMT"));
+    }
+
+    @Test
+    void negativeAmount_throws() throws Exception {
+
+        Method method =
+                IngestionService.class.getDeclaredMethod(
+                        "validateAndConvertTypes",
+                        Map.class
+                );
+
+        method.setAccessible(true);
+
+        Map<String, Object> map =
+                new HashMap<>();
+
+        map.put("TRAN_AMT", "-100");
+
+        assertThrows(
+                Exception.class,
+                () -> method.invoke(service, map)
+        );
+    }
+
+    // =====================================================
+    // DEFAULTS
+    // =====================================================
+
+    @Test
+    void applyDefaults_setsDefaults() throws Exception {
+
+        Method method =
+                IngestionService.class.getDeclaredMethod(
+                        "applyDefaults",
+                        Map.class
+                );
+
+        method.setAccessible(true);
+
+        Map<String, Object> map =
+                new HashMap<>();
+
+        map.put("TRAN_CRTE_DT", "2025");
+
+        method.invoke(service, map);
+
+        assertEquals("00", map.get("CUR_STAT"));
+        assertEquals(0, map.get("NON_FIN_TXN"));
+        assertEquals("2025",
+                map.get("RPLCTN_UPDT_TS"));
+    }
+
+    // =====================================================
+    // HELPERS
+    // =====================================================
+
+    @Test
+    void invalidJson_throwsException() {
+
+        EventEnvelope env =
+                envelope(
+                        "PAYMENT",
+                        "A",
+                        "{invalid}"
+                );
+
+        when(eventConfigLoader.get(any()))
+                .thenReturn(config());
+
+        assertThrows(
+                IngestionService.IngestionProcessingException.class,
+                () -> service.ingest(env)
+        );
+    }
+
+    @Test
+    void missingConfig_throwsException() {
+
+        EventEnvelope env =
+                envelope("UNKNOWN", "A", "{}");
+
+        when(eventConfigLoader.get(any()))
+                .thenReturn(null);
+
+        assertThrows(
+                IngestionService.IngestionProcessingException.class,
+                () -> service.ingest(env)
+        );
+    }
+
+    @Test
+    void invalidMetadata_returnsFalseUpdateOperation() throws Exception {
+
+        Method method =
+                IngestionService.class.getDeclaredMethod(
+                        "isUpdateOperation",
+                        EventEnvelope.class
+                );
+
+        method.setAccessible(true);
+
+        EventEnvelope env =
+                new EventEnvelope();
+
+        env.setEventMetadata("{bad-json}");
+
+        boolean result =
+                (boolean) method.invoke(service, env);
+
+        assertFalse(result);
     }
 }

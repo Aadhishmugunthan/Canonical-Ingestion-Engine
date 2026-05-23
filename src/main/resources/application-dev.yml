@@ -1,0 +1,24 @@
+# =============================================
+# DEV PROFILE - Never used in production
+# =============================================
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521/FREEPDB1
+    username: SEND_TXN_OWNER
+    password: ${DB_PASSWORD:1234}   # local dev only — use env var
+    hikari:
+      maximum-pool-size: 5
+
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    com.poc.CanonicalIngestionEngine: DEBUG
+    org.springframework.jdbc.core: DEBUG
+
+ingestion:
+  config-server-url: http://localhost:8888

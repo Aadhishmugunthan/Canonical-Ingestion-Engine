@@ -4,44 +4,61 @@ import com.poc.CanonicalIngestionEngine.model.EventEnvelope;
 import org.jeasy.rules.api.Facts;
 import org.jeasy.rules.api.Rules;
 import org.jeasy.rules.api.RulesEngine;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
  * Business Rules Engine using Easy Rules
  *
  * Evaluates rules defined in YAML files for each event type.
- * Rules can mark events to be ignored based on various conditions.
  */
 @Component
 public class RuleEngine {
 
-    @Autowired
-    private RulesEngine rulesEngine;
+    private static final Logger log =
+            LoggerFactory.getLogger(RuleEngine.class);
 
-    @Autowired
-    private RuleLoader ruleLoader;
+    private final RulesEngine rulesEngine;
+
+    private final RuleLoader ruleLoader;
+
+    public RuleEngine(
+            RulesEngine rulesEngine,
+            RuleLoader ruleLoader
+    ) {
+        this.rulesEngine = rulesEngine;
+        this.ruleLoader = ruleLoader;
+    }
 
     /**
      * Apply business rules to an event envelope
-     *
-     * @param envelope - Event to evaluate
      */
     public void apply(EventEnvelope envelope) {
 
-        System.out.println("   🔍 Evaluating business rules for: " + envelope.getEventName());
+        log.info(
+                "Evaluating business rules for eventName={} eventId={}",
+                envelope.getEventName(),
+                envelope.getEventId()
+        );
 
-        // Get rules for this event type
-        Rules rules = ruleLoader.getRules(envelope.getEventName());
+        Rules rules =
+                ruleLoader.getRules(envelope.getEventName());
 
         if (rules.isEmpty()) {
-            System.out.println("   ℹ️  No rules defined for " + envelope.getEventName() + ", proceeding...");
+
+            log.info(
+                    "No rules defined for eventName={}",
+                    envelope.getEventName()
+            );
+
             envelope.setIgnore(false);
+
             return;
         }
 
-        // Create facts (variables available to rules)
         Facts facts = new Facts();
+
         facts.put("envelope", envelope);
         facts.put("eventName", envelope.getEventName());
         facts.put("eventId", envelope.getEventId());
@@ -51,14 +68,21 @@ public class RuleEngine {
         facts.put("correlationId", envelope.getCorrelationId());
         facts.put("regulatoryRegion", envelope.getRegulatoryRegion());
 
-        // Fire rules
         rulesEngine.fire(rules, facts);
 
-        // Log result
         if (envelope.isIgnore()) {
-            System.out.println("   ❌ Event marked for IGNORE by rules");
+
+            log.warn(
+                    "Event marked for IGNORE by rules | eventId={}",
+                    envelope.getEventId()
+            );
+
         } else {
-            System.out.println("   ✅ Event passed all rules");
+
+            log.info(
+                    "Event passed all business rules | eventId={}",
+                    envelope.getEventId()
+            );
         }
     }
 }

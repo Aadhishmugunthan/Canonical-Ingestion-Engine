@@ -2,10 +2,15 @@ package com.poc.CanonicalIngestionEngine.mapping;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jayway.jsonpath.JsonPath;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,133 +19,345 @@ import java.util.UUID;
 @Component
 public class DataMapper {
 
-    public Map<String, Object> map(JsonNode payload,
-                                   Map<String, String> columnMappings,
-                                   List<String> mandatoryColumns,
-                                   boolean autoGenerateId) {
+    private static final Logger log =
+            LoggerFactory.getLogger(DataMapper.class);
 
-        Map<String, Object> result = new HashMap<>();
-        String jsonString = payload.toString(); // Convert to string for JsonPath
+    public Map<String, Object> map(
+            JsonNode payload,
+            Map<String, String> columnMappings,
+            List<String> mandatoryColumns,
+            boolean autoGenerateId
+    ) {
 
-        System.out.println("      🗺️  Mapping JSON to columns...");
+        log.info("Mapping JSON to columns");
 
-        for (Map.Entry<String, String> entry : columnMappings.entrySet()) {
-            String columnName = entry.getKey();
-            String jsonPath = entry.getValue();
+        String jsonString = payload.toString();
 
-            try {
-                Object value = JsonPath.read(jsonString, jsonPath);
-
-                if (value instanceof String) {
-                    String strValue = ((String) value).trim();
-                    if (strValue.isEmpty()) {
-                        result.put(columnName, null);
-                    } else {
-                        result.put(columnName, convertIfDate(columnName, strValue));
-                    }
-                } else if (value instanceof Integer || value instanceof Long || value instanceof Double || value instanceof Boolean) {
-                    result.put(columnName, value);
-                } else {
-                    result.put(columnName, value != null ? value.toString() : null);
-                }
-
-            } catch (Exception e) {
-                result.put(columnName, null);
-            }
-        }
+        Map<String, Object> result =
+                processMappings(jsonString, columnMappings);
 
         if (autoGenerateId) {
-            result.put("ID", UUID.randomUUID().toString());
-            System.out.println("         ➕ Generated ID: " + result.get("ID"));
+            String generatedId =
+                    UUID.randomUUID().toString();
+
+            result.put("ID", generatedId);
+
+            log.debug(
+                    "Generated ID: {}",
+                    generatedId
+            );
         }
 
-        validateMandatoryFields(result, mandatoryColumns);
+        validateMandatoryFields(
+                result,
+                mandatoryColumns
+        );
 
-        System.out.println("         ✅ Mapped " + result.size() + " columns");
+        log.info(
+                "Mapped {} columns",
+                result.size()
+        );
 
         return result;
     }
 
-    private Object convertIfDate(String columnName, String value) {
-        if (columnName.endsWith("_DT") || columnName.endsWith("_TS") || columnName.contains("DATE")) {
-            try {
-                Instant instant = Instant.parse(value);
-                return Timestamp.from(instant);
-            } catch (Exception e) {
-                return value;
-            }
+    public Map<String, Object> mapAddress(
+            JsonNode payload,
+            String rootPath,
+            Map<String, String> fieldMappings,
+            String addressType,
+            String parentId
+    ) {
+
+        log.info(
+                "Mapping address type={}",
+                addressType
+        );
+
+        String jsonString = payload.toString();
+
+        if (!pathExists(jsonString, rootPath)) {
+
+            log.warn(
+                    "Address data not found at path={}",
+                    rootPath
+            );
+
+            return null;
         }
-        return value;
+
+        Map<String, Object> result =
+                processMappings(jsonString, fieldMappings);
+
+        result.put(
+                "ID",
+                UUID.randomUUID().toString()
+        );
+
+        result.put(
+                "ADDR_TYPE",
+                addressType
+        );
+
+        if (parentId != null) {
+            result.put(
+                    "PARENT_ID",
+                    parentId
+            );
+        }
+
+        log.info(
+                "Mapped address with {} fields",
+                result.size()
+        );
+
+        return result;
     }
 
-    private void validateMandatoryFields(Map<String, Object> data, List<String> mandatory) {
-        if (mandatory == null || mandatory.isEmpty()) {
+    // =====================================================
+    // COMMON MAPPING LOGIC
+    // =====================================================
+
+    private Map<String, Object> processMappings(
+            String jsonString,
+            Map<String, String> mappings
+    ) {
+
+        Map<String, Object> result =
+                new HashMap<>();
+
+        for (Map.Entry<String, String> entry :
+                mappings.entrySet()) {
+
+            String columnName =
+                    entry.getKey();
+
+            String jsonPath =
+                    entry.getValue();
+
+            Object mappedValue =
+                    extractValue(
+                            jsonString,
+                            columnName,
+                            jsonPath
+                    );
+
+            result.put(
+                    columnName,
+                    mappedValue
+            );
+        }
+
+        return result;
+    }
+
+    private Object extractValue(
+            String jsonString,
+            String columnName,
+            String jsonPath
+    ) {
+
+        try {
+
+            String fullPath =
+                    jsonPath.startsWith("$")
+                            ? jsonPath
+                            : "$." + jsonPath;
+
+            Object value =
+                    JsonPath.read(
+                            jsonString,
+                            fullPath
+                    );
+
+            return processValue(
+                    columnName,
+                    value
+            );
+
+        } catch (Exception e) {
+
+            log.debug(
+                    "Could not map column={} using jsonPath={}",
+                    columnName,
+                    jsonPath
+            );
+
+            return null;
+        }
+    }
+
+    private Object processValue(
+            String columnName,
+            Object value
+    ) {
+
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof String strValue) {
+
+            String trimmedValue =
+                    strValue.trim();
+
+            if (trimmedValue.isEmpty()) {
+                return null;
+            }
+
+            return convertDateToStandard(
+                    columnName,
+                    trimmedValue
+            );
+        }
+
+        if (value instanceof Number ||
+                value instanceof Boolean) {
+
+            return value;
+        }
+
+        return value.toString();
+    }
+
+    private boolean pathExists(
+            String jsonString,
+            String rootPath
+    ) {
+
+        try {
+
+            Object value =
+                    JsonPath.read(
+                            jsonString,
+                            rootPath
+                    );
+
+            return value != null;
+
+        } catch (Exception e) {
+
+            return false;
+        }
+    }
+
+    // =====================================================
+    // DATE NORMALIZATION
+    // =====================================================
+
+    private Object convertDateToStandard(
+            String columnName,
+            String value
+    ) {
+
+        boolean isDateOrTs =
+                columnName.endsWith("_TS")
+                        || columnName.endsWith("_DT")
+                        || columnName.contains("DATE")
+                        || columnName.endsWith("_DOB");
+
+        if (!isDateOrTs) {
+            return value;
+        }
+
+        if (value.isBlank()) {
+            return null;
+        }
+
+        String[] formats = {
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss",
+                "dd-MM-yyyy HH:mm:ss",
+                "yyyy-MM-dd"
+        };
+
+        for (String format : formats) {
+
+            try {
+
+                DateTimeFormatter formatter =
+                        DateTimeFormatter.ofPattern(format);
+
+                if (format.contains("HH")) {
+
+                    LocalDateTime localDateTime =
+                            LocalDateTime.parse(
+                                    value,
+                                    formatter
+                            );
+
+                    return Timestamp.valueOf(
+                            localDateTime
+                    );
+                }
+
+                LocalDate localDate =
+                        LocalDate.parse(
+                                value,
+                                formatter
+                        );
+
+                return Timestamp.valueOf(
+                        localDate.atStartOfDay()
+                );
+
+            } catch (Exception ignored) {
+            }
+        }
+
+        try {
+
+            return Timestamp.from(
+                    Instant.parse(value)
+            );
+
+        } catch (Exception ignored) {
+        }
+
+        throw new RuntimeException(
+                "Invalid date format for "
+                        + columnName
+                        + ": "
+                        + value
+        );
+    }
+
+    // =====================================================
+    // VALIDATION
+    // =====================================================
+
+    private void validateMandatoryFields(
+            Map<String, Object> data,
+            List<String> mandatory
+    ) {
+
+        if (mandatory == null ||
+                mandatory.isEmpty()) {
+
             return;
         }
 
         for (String field : mandatory) {
-            Object value = data.get(field);
-            if (value == null || (value instanceof String && ((String) value).trim().isEmpty())) {
-                throw new RuntimeException("Missing mandatory field: " + field);
+
+            Object value =
+                    data.get(field);
+
+            if (value == null ||
+                    (
+                            value instanceof String str &&
+                                    str.trim().isEmpty()
+                    )) {
+
+                log.error(
+                        "Mandatory field missing: {}",
+                        field
+                );
+
+                throw new RuntimeException(
+                        "Missing mandatory field: "
+                                + field
+                );
             }
         }
-    }
-
-    public Map<String, Object> mapAddress(JsonNode payload,
-                                          String rootPath,
-                                          Map<String, String> fieldMappings,
-                                          String addressType,
-                                          String parentId) {
-
-        System.out.println("         🏠 Mapping address type: " + addressType);
-
-        String jsonString = payload.toString();
-
-        // Navigate to root path if not "$"
-        Object addressData;
-        try {
-            addressData = JsonPath.read(jsonString, rootPath);
-        } catch (Exception e) {
-            System.out.println("            ⚠️  Address data not found at: " + rootPath);
-            return null;
-        }
-
-        if (addressData == null) {
-            return null;
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        String addressJson = addressData.toString();
-
-        for (Map.Entry<String, String> entry : fieldMappings.entrySet()) {
-            String columnName = entry.getKey();
-            String jsonPath = entry.getValue();
-
-            try {
-                // For relative paths within the address object
-                String fullPath = jsonPath.startsWith("$") ? jsonPath : "$." + jsonPath;
-                Object value = JsonPath.read(addressJson, fullPath);
-
-                if (value instanceof String) {
-                    String strValue = ((String) value).trim();
-                    result.put(columnName, strValue.isEmpty() ? null : strValue);
-                } else {
-                    result.put(columnName, value != null ? value.toString() : null);
-                }
-            } catch (Exception e) {
-                result.put(columnName, null);
-            }
-        }
-
-        result.put("ID", UUID.randomUUID().toString());
-        result.put("ADDR_TYPE", addressType);
-
-        if (parentId != null) {
-            result.put("PARENT_ID", parentId);
-        }
-
-        System.out.println("            ✅ Mapped address with " + result.size() + " fields");
-
-        return result;
     }
 }

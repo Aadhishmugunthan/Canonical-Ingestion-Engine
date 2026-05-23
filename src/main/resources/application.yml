@@ -1,38 +1,45 @@
 spring:
   datasource:
-    url: jdbc:oracle:thin:@localhost:1521/FREEPDB1
-    username: SEND_TXN_OWNER
-    password: 1234
+    url: ${DB_URL:jdbc:oracle:thin:@localhost:1521/FREEPDB1}
+    username: ${DB_USERNAME:SEND_TXN_OWNER}
+    password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
     hikari:
-      maximum-pool-size: 5
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
       connection-test-query: SELECT 1 FROM DUAL
 
   jpa:
     hibernate:
       ddl-auto: none
-    show-sql: true
+    show-sql: false          # NEVER true in production — moved to application-dev.yml
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.OracleDialect
 
 management:
   endpoints:
     web:
       exposure:
-        include: refresh,health,info
-
-  jdbc:
-    template:
-      fetch-size: 100
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
 
 ingestion:
+  config-server-url: ${CONFIG_SERVER_URL:http://localhost:8888}
   mapping-path: classpath:/mapping
   sql-path: classpath:/sql
   rules-path: classpath:/rules
 
-
 logging:
   level:
-    org.springframework.jdbc.core: DEBUG
+    root: INFO
+    com.poc.CanonicalIngestionEngine: INFO
+    org.springframework.jdbc.core: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{correlationId}] %-5level %logger{36} - %msg%n"

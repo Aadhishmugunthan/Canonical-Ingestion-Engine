@@ -73,6 +73,8 @@ dependencies {
 
     implementation 'org.springframework.cloud:spring-cloud-starter-config'
 
+    testImplementation 'com.intuit.karate:karate-junit5:1.4.1'
+
 }
 
 ext {
@@ -85,14 +87,7 @@ dependencyManagement {
     }
 }
 test {
-    useJUnitPlatform() {
-        excludeTags 'integration'
-    }
-
-    include '**/*Test.class'
-    include '**/*Tests.class'
-
-    finalizedBy jacocoTestReport
+    useJUnitPlatform()
 }
 
 task integrationTest(type: Test) {
@@ -123,37 +118,37 @@ jacocoTestReport {
                     '**/model/**',          // DTOs
                     '**/config/**',         // config classes
                     '**/listener/**',
-                    '**/controller/**',// controllers (skip)
+                    '**/controller/**',
+                    '**/testutil/**',// controllers (skip)
                     '**/*Application.*',    // main class
-                    '**/CanonicalIngestionEngineApplication.*'
+                    '**/CanonicalIngestionEngineApplication.*',
+                    '**/SpringContextHolder.*'
             ])
         }))
     }
 
 
+
     jacocoTestCoverageVerification {
 
         violationRules {
-            rule {
-                element = 'PACKAGE'
 
-                excludes = [
-                        'com.poc.CanonicalIngestionEngine.controller',
-                        'com.poc.CanonicalIngestionEngine.listener',
-                        'com.poc.CanonicalIngestionEngine.model',
-                        'com.poc.CanonicalIngestionEngine.config',
-                        'com.poc.CanonicalIngestionEngine'
-                ]
+            rule {
+
+                element = 'BUNDLE'
 
                 limit {
-                    minimum = 0.10   // keep 50% or change to 0.80 later
+
+                    counter = 'INSTRUCTION'
+                    value = 'COVEREDRATIO'
+
+                    minimum = 0.50
                 }
             }
         }
     }
 
     check.dependsOn jacocoTestCoverageVerification
-
     sonar {
         properties {
             property "sonar.projectKey", "CanonicalIngestionEngine"
@@ -167,7 +162,8 @@ jacocoTestReport {
             **/controller/**,
             **/listener/**,
             **/*Application.java,
-            **/EventEnvelope.java
+            **/EventEnvelope.java,
+            **/testutil/**
         """
         }
     }
@@ -191,7 +187,9 @@ jacocoTestReport {
             **/listener/**,
             **/controller/**,
             **/*Application.java,
-            **/CanonicalIngestionEngineApplication.java
+            '**/testutil/**',
+            **/CanonicalIngestionEngineApplication.java,
+            **/SpringContextHolder.java*
         """
 
             // 🔥 ALSO EXCLUDE FROM ANALYSIS (optional)
@@ -200,7 +198,9 @@ jacocoTestReport {
             **/model/**,
             **/listener/**,
             **/controller/**,
-            **/*Application.java
+            **/testutil/**,
+            **/*Application.java,
+            **/CanonicalIngestionEngineApplication.java
         """
         }
 

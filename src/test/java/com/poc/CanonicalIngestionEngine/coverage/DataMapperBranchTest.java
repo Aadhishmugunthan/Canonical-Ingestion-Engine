@@ -4,12 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.CanonicalIngestionEngine.mapping.DataMapper;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
-public class DataMapperBranchTest {
+import static org.junit.jupiter.api.Assertions.*;
 
-    DataMapper dm = new DataMapper();
-    ObjectMapper mapper = new ObjectMapper();
+class DataMapperBranchTest {
+
+    private final DataMapper dm =
+            new DataMapper();
+
+    private final ObjectMapper mapper =
+            new ObjectMapper();
 
     @Test
     void coverAllMapperBranches() throws Exception {
@@ -24,27 +31,74 @@ public class DataMapperBranchTest {
         }
         """;
 
-        Map<String,String> mapping = new HashMap<>();
-        mapping.put("NAME","$.name");
-        mapping.put("EMPTY","$.empty");
-        mapping.put("NUM","$.num");
-        mapping.put("BOOL","$.bool");
-        mapping.put("DATE_DT","$.date");
-        mapping.put("MISSING","$.missing");
+        Map<String, String> mapping =
+                new HashMap<>();
 
-        dm.map(
-                mapper.readTree(json),
-                mapping,
-                Arrays.asList("NAME"),
-                true
+        mapping.put("NAME", "$.name");
+        mapping.put("EMPTY", "$.empty");
+        mapping.put("NUM", "$.num");
+        mapping.put("BOOL", "$.bool");
+        mapping.put("DATE_DT", "$.date");
+        mapping.put("MISSING", "$.missing");
+
+        Map<String, Object> result =
+                dm.map(
+                        mapper.readTree(json),
+                        mapping,
+                        Arrays.asList("NAME"),
+                        true
+                );
+
+        assertEquals(
+                "John",
+                result.get("NAME")
         );
 
-        dm.mapAddress(
-                mapper.readTree(json),
-                "$",
-                mapping,
+        assertNull(
+                result.get("EMPTY")
+        );
+
+        assertEquals(
+                10,
+                result.get("NUM")
+        );
+
+        assertEquals(
+                true,
+                result.get("BOOL")
+        );
+
+        assertNotNull(
+                result.get("DATE_DT")
+        );
+
+        assertNull(
+                result.get("MISSING")
+        );
+
+        assertNotNull(
+                result.get("ID")
+        );
+
+        Map<String, Object> address =
+                dm.mapAddress(
+                        mapper.readTree(json),
+                        "$",
+                        mapping,
+                        "HOME",
+                        "P1"
+                );
+
+        assertNotNull(address);
+
+        assertEquals(
                 "HOME",
-                "P1"
+                address.get("ADDR_TYPE")
+        );
+
+        assertEquals(
+                "P1",
+                address.get("PARENT_ID")
         );
     }
 }
