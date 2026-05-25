@@ -1,0 +1,10 @@
+{
+  "regulatoryRegion": "STL",
+  "eventSource": "SETTLEMENT_SERVICE",
+  "eventName": "SETTLEMENT",
+  "eventId": "evt-settle-full-01",
+  "correlationId": "corr-settle-full-01",
+  "eventTimestamp": 1738661000000,
+  "eventMetadata": "{\"operation\":\"A\"}",
+  "eventPayload": "{\"settlementTransactionId\":\"SET_1\",\"transactionType\":\"1\",\"referenceId\":\"REF001\",\"partnerId\":\"BANK001\",\"country\":\"IND\",\"network\":\"VS\",\"brand\":\"1\",\"acceptanceBrand\":\"VISA\",\"correlationId\":\"corr-settle-full-01\",\"settlementLocalDateTime\":\"2025-02-04T13:00:00\",\"settlementDate\":\"2025-02-04\",\"settlementAmount\":{\"value\":1000,\"currency\":\"INR\"},\"settlementMethod\":\"CR\",\"settlementPurpose\":\"SET\",\"settlementReference\":\"SETREF001\",\"fundAvailability\":\"true\",\"cardExpiry\":\"12/29\",\"originalRequestPayload\":\"REQ_SAMPLE\",\"originalResponsePayload\":\"RESP_SAMPLE\",\"settlementStatus\":\"SUCCESS\",\"settlementStatusCode\":\"00\",\"settlementStatusDescription\":\"Settled Successfully\",\"debtorAccountUri\":\"9999999999999\",\"creditorAccountUri\":\"8888888888888\",\"previousStatus\":\"PENDING\",\"debtor\":{\"firstName\":\"John\",\"lastName\":\"Doe\",\"phone\":\"9999999999\",\"email\":\"john@example.com\",\"dateOfBirth\":\"1990-01-01\",\"address\":{\"line1\":\"123 Debtor St\",\"line2\":\"Apt 1\",\"city\":\"Mumbai\",\"state\":\"MH\",\"country\":\"IND\",\"postalCode\":\"400001\"}},\"creditor\":{\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"phone\":\"8888888888\",\"email\":\"jane@example.com\",\"dateOfBirth\":\"1992-01-01\",\"address\":{\"line1\":\"456 Creditor Ave\",\"line2\":\"Suite 2\",\"city\":\"Delhi\",\"state\":\"DL\",\"country\":\"IND\",\"postalCode\":\"110001\"}}}"
+}

@@ -1,0 +1,10 @@
+{
+  "regulatoryRegion": "STL",
+  "eventSource": "FUNDING_SERVICE",
+  "eventName": "FUNDING",
+  "eventId": "evt-fund-full-01",
+  "correlationId": "corr-fund-full-01",
+  "eventTimestamp": 1738660000000,
+  "eventMetadata": "{\"operation\":\"A\",\"timestamp\":\"2025-02-04T12:30:00Z\"}",
+  "eventPayload": "{\"fundingTransactionId\":\"FUND_1001\",\"transactionType\":\"1\",\"referenceId\":\"REF001\",\"partnerId\":\"BANK001\",\"country\":\"IND\",\"network\":\"VS\",\"brand\":\"1\",\"acceptanceBrand\":\"VISA\",\"switchSerialNumber\":\"99999\",\"correlationId\":\"corr-fund-full-01\",\"transactionLocalDateTime\":\"2025-02-04T12:30:00Z\",\"fundingAmount\":{\"value\":5000,\"currency\":\"INR\"},\"settlementAmount\":{\"value\":5000,\"currency\":\"INR\"},\"fundingMethod\":\"CR\",\"fundingPurpose\":\"FND\",\"sourceAccountUri\":\"9999999999999\",\"destinationAccountUri\":\"8888888888888\",\"authorizationCode\":\"AUTH01\",\"responseCode\":\"00\",\"cardExpiry\":\"12/29\",\"originalRequestPayload\":\"REQ_SAMPLE\",\"originalResponsePayload\":\"RESP_SAMPLE\",\"fundingStatus\":{\"eligible\":\"true\",\"responseReasonCode\":\"00\",\"responseReasonDetail\":\"Approved\"},\"source\":{\"firstName\":\"John\",\"lastName\":\"Doe\",\"phone\":\"9999999999\",\"email\":\"john@example.com\",\"dateOfBirth\":\"1990-01-01T00:00:00Z\",\"address\":{\"line1\":\"123 Source St\",\"line2\":\"Apt 1\",\"city\":\"Mumbai\",\"state\":\"MH\",\"country\":\"IND\",\"postalCode\":\"400001\"}},\"destination\":{\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"phone\":\"8888888888\",\"email\":\"jane@example.com\",\"dateOfBirth\":\"1992-01-01T00:00:00Z\",\"address\":{\"line1\":\"456 Dest Ave\",\"line2\":\"Suite 2\",\"city\":\"Delhi\",\"state\":\"DL\",\"country\":\"IND\",\"postalCode\":\"110001\"}}}"
+}

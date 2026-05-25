@@ -1,0 +1,10 @@
+{
+  "regulatoryRegion": "STL",
+  "eventSource": "REFUND_SERVICE",
+  "eventName": "REFUND",
+  "eventId": "evt-ref-full-01",
+  "correlationId": "corr-ref-full-01",
+  "eventTimestamp": 1738660000000,
+  "eventMetadata": "{\"operation\":\"A\",\"timestamp\":\"2025-02-04T12:30:00Z\"}",
+  "eventPayload": "{\"refundTransactionId\":\"REF_1001\",\"transactionType\":\"1\",\"referenceId\":\"REF001\",\"originalTransactionId\":\"PAY_1001\",\"partnerId\":\"BANK001\",\"country\":\"IND\",\"network\":\"VS\",\"brand\":\"1\",\"acceptanceBrand\":\"VISA\",\"correlationId\":\"corr-ref-full-01\",\"refundDate\":\"2025-02-04T12:30:00Z\",\"refundReason\":\"Customer Refund\",\"refundMethod\":\"CR\",\"acquiringICA\":\"12345\",\"acquiringIdentificationCode\":\"AIC001\",\"debtorAccountUri\":\"9999999999999\",\"creditorAccountUri\":\"8888888888888\",\"cardExpiry\":\"12/29\",\"originalRequestPayload\":\"REQ_SAMPLE\",\"originalResponsePayload\":\"RESP_SAMPLE\",\"refundAmount\":{\"value\":1000,\"currency\":\"INR\"},\"settlementAmount\":{\"value\":1000,\"currency\":\"INR\"},\"status\":\"COMPLETED\",\"clearingDate\":\"2025-02-04T13:00:00Z\",\"switchDate\":\"2025-02-04T12:45:00Z\",\"refundStatus\":{\"eligible\":\"true\",\"responseReasonCode\":\"00\",\"responseReasonDetail\":\"Approved\"},\"debtor\":{\"firstName\":\"John\",\"middleName\":\"K\",\"lastName\":\"Doe\",\"phone\":\"9999999999\",\"email\":\"john@example.com\",\"dateOfBirth\":\"1990-01-01T00:00:00Z\",\"address\":{\"line1\":\"123 Debtor St\",\"line2\":\"Apt 1\",\"city\":\"Mumbai\",\"state\":\"MH\",\"country\":\"IND\",\"postalCode\":\"400001\"}},\"creditor\":{\"firstName\":\"Jane\",\"middleName\":\"M\",\"lastName\":\"Doe\",\"phone\":\"8888888888\",\"email\":\"jane@example.com\",\"dateOfBirth\":\"1992-01-01T00:00:00Z\",\"address\":{\"line1\":\"456 Creditor Ave\",\"line2\":\"Suite 2\",\"city\":\"Delhi\",\"state\":\"DL\",\"country\":\"IND\",\"postalCode\":\"110001\"}}}"
+}

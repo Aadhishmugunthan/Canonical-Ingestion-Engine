@@ -1,0 +1,10 @@
+{
+  "regulatoryRegion": "STL",
+  "eventSource": "PAYMENT_SERVICE",
+  "eventName": "PAYMENT",
+  "eventId": "evt-pay-full-01",
+  "correlationId": "corr-pay-full-01",
+  "eventTimestamp": 1738660000000,
+  "eventMetadata": "{\"operation\":\"A\",\"timestamp\":\"2025-02-04T12:30:00Z\"}",
+  "eventPayload": "{\"paymentTransactionId\":\"PAY_1001\",\"transactionType\":\"1\",\"referenceId\":\"REF001\",\"partnerId\":\"BANK001\",\"partnerName\":\"Axis Bank\",\"institution\":\"Axis Bank Ltd\",\"country\":\"IND\",\"network\":\"VS\",\"brand\":\"1\",\"acceptanceBrand\":\"VISA\",\"switchSerialNumber\":\"99999\",\"correlationId\":\"corr-pay-full-01\",\"transactionLocalDateTime\":\"2025-02-04T12:30:00Z\",\"paymentAmount\":{\"value\":1000,\"currency\":\"INR\"},\"settlementAmount\":{\"value\":1000,\"currency\":\"INR\"},\"paymentMethod\":\"CR\",\"paymentPurpose\":\"PUR\",\"debtorAccountUri\":\"9999999999999\",\"creditorAccountUri\":\"8888888888888\",\"authorizationCode\":\"AUTH01\",\"responseCode\":\"00\",\"cardExpiry\":\"12/29\",\"originalRequestPayload\":\"REQ_SAMPLE\",\"originalResponsePayload\":\"RESP_SAMPLE\",\"paymentStatus\":{\"eligible\":\"true\",\"responseReasonCode\":\"00\",\"responseReasonDetail\":\"Approved\"},\"debtor\":{\"firstName\":\"John\",\"lastName\":\"Doe\",\"phone\":\"9999999999\",\"email\":\"john@example.com\",\"dateOfBirth\":\"1990-01-01T00:00:00Z\",\"address\":{\"line1\":\"123 Debtor St\",\"line2\":\"Apt 1\",\"city\":\"Mumbai\",\"state\":\"MH\",\"country\":\"IND\",\"postalCode\":\"400001\"}},\"creditor\":{\"firstName\":\"Jane\",\"lastName\":\"Doe\",\"phone\":\"8888888888\",\"email\":\"jane@example.com\",\"dateOfBirth\":\"1992-01-01T00:00:00Z\",\"address\":{\"line1\":\"456 Creditor Ave\",\"line2\":\"Suite 2\",\"city\":\"Delhi\",\"state\":\"DL\",\"country\":\"IND\",\"postalCode\":\"110001\"}}}"
+}

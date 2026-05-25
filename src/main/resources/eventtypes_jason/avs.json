@@ -1,0 +1,10 @@
+{
+  "regulatoryRegion": "STL",
+  "eventSource": "AVS_SERVICE",
+  "eventName": "AVS",
+  "eventId": "evt-avs-full-03",
+  "correlationId": "corr-avs-full-03",
+  "eventTimestamp": 1738660000000,
+  "eventMetadata": "{\"operation\":\"A\",\"timestamp\":\"2025-02-04T12:30:00Z\"}",
+  "eventPayload": "{\"avsTranId\":\"AVS_3\",\"transactionType\":\"1\",\"avsExtRefId\":\"REF001\",\"switchStatus\":\"APPROVED\",\"switchStatusDesc\":\"Switch approved the transaction\",\"originatingInstId\":\"BANK001\",\"originatingInstName\":\"Axis Bank\",\"transferAccptName\":\"Axis Bank Ltd\",\"transferAccptId\":\"TAC001\",\"createDate\":\"2025-02-04T12:30:00Z\",\"cvcStatCd\":\"M\",\"avsRespCd\":\"Y\",\"busnPrtnrRefId\":\"BP1\",\"network\":\"VS\",\"switchSerialNumber\":\"99999\",\"correlationId\":\"corr-avs-full-03\",\"acctNum\":\"9999999999999\",\"transactionAmount\":1000,\"transactionCurrency\":\"INR\",\"networkResponseCode\":\"00\",\"networkResponseCodeDesc\":\"Approved\",\"partnerName\":\"Axis Bank\",\"accountType\":\"1\",\"frstNam\":\"John\",\"midNam\":\"K\",\"lstNam\":\"Doe\",\"phone\":\"9999999999\",\"email\":\"john.doe@example.com\",\"birthDate\":\"1990-01-01T00:00:00Z\",\"cntryCd\":\"IND\",\"accountUri\":\"9999999999999\",\"govtId\":\"GOVTID001\",\"cardExpiry\":\"12/29\",\"stLn1Addr\":\"123 Main St\",\"stLn2Addr\":\"Apt 4B\",\"cityNam\":\"Mumbai\",\"stPrvncCd\":\"MH\",\"postCd\":\"400001\",\"addrStatCd\":\"A\",\"postStatCd\":\"V\",\"processorId\":\"PRC001\",\"acquiringICA\":\"ICA001\",\"acquiringIdentificationCode\":\"AIC001\",\"requestId\":\"REQ001\",\"originalRequestPayload\":\"REQ_PAYLOAD_SAMPLE\",\"originalResponsePayload\":\"RESP_PAYLOAD_SAMPLE\",\"billingAddr1\":\"456 Billing Rd\",\"billingAddr2\":\"Suite 10\",\"billingCity\":\"Delhi\",\"billingState\":\"DL\",\"billingCountry\":\"IND\",\"billingZip\":\"110001\",\"mailingAddr1\":\"789 Mailing Ave\",\"mailingAddr2\":\"Block C\",\"mailingCity\":\"Bangalore\",\"mailingState\":\"KA\",\"mailingCountry\":\"IND\",\"mailingZip\":\"560001\"}"
+}

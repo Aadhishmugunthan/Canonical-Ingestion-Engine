@@ -1,0 +1,10 @@
+{
+  "regulatoryRegion": "STL",
+  "eventSource": "AIS2_SERVICE",
+  "eventName": "AIS2",
+  "eventId": "evt-ais2-full-20",
+  "correlationId": "corr-ais2-full-20",
+  "eventTimestamp": 1738661000000,
+  "eventMetadata": "{\"operation\":\"U\",\"timestamp\":\"2025-02-04T13:00:00Z\"}",
+  "eventPayload": "{\"accountInformationId\":\"AIS_143\",\"transactionType\":\"AIS2\",\"switchStatus\":\"APPROVED\",\"switchStatusDesc\":null,\"referenceId\":\"REF99001\",\"partnerId\":\"BANK001\",\"partnerName\":\"Axis Bank\",\"institution\":\"Axis Bank Ltd\",\"accountUri\":\"9999999999999\",\"accountType\":\"1\",\"accountStatementCurrency\":\"INR\",\"transactionAmount\":1000,\"network\":\"VS\",\"brand\":\"1\",\"acceptanceBrand\":\"VISA\",\"paymentType\":\"AIS2\",\"country\":\"IND\",\"switchSerialNumber\":\"99999\",\"transactionLocalDateTime\":\"2025-02-04T13:00:00Z\",\"cardExpiry\":\"12/29\",\"originalRequestPayload\":\"REQ_SAMPLE_AIS2\",\"originalResponsePayload\":\"RESP_SAMPLE_AIS2\",\"sendingAccountEligible\":{\"eligible\":\"true\",\"responseReasonCode\":\"00\",\"responseReasonDetail\":\"Account Eligible AIS2\"},\"receivingAccountEligible\":{\"eligible\":\"true\",\"responseReasonCode\":\"00\",\"responseReasonDetail\":\"Account Eligible AIS2\"}}"
+}
